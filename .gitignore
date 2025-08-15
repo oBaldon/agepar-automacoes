@@ -27,3 +27,30 @@ Thumbs.db
 
 coverage/
 EOF
+
+# npm/pnpm extras
+package-lock.json
+.pnpm-debug.log*
+.npmrc.local
+
+# Dados gerados pelo worker (redundante ao .gitignore local, mas seguro)
+apps/validador-orcamento/worker/data/
+apps/validador-orcamento/worker/output/
+
+# Python extra
+.ruff_cache/
+.coverage
+coverage.xml
+.pyre/
+.pytype/
+
+# Python extra
+.ruff_cache/
+.coverage
+coverage.xml
+.pyre/
+.pytype/
+
+# Vite envs locais
+apps/portal/.env.local
+apps/portal/.env.*.local
