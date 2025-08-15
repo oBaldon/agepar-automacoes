@@ -1,0 +1,9 @@
+{
+  "name": "@agepar/ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./index.tsx",
+  "peerDependencies": { "react": "^18.2.0", "react-dom": "^18.2.0" },
+  "dependencies": { "clsx": "^2.1.1" }
+}
