@@ -1,56 +1,60 @@
 cat > .gitignore <<'EOF'
-# Node
+# -----------------------
+# Node / Frontend
+# -----------------------
 node_modules/
 dist/
 build/
 .next/
 yarn.lock
+package-lock.json
+.pnpm-debug.log*
+.npmrc.local
 
-# Python
+# -----------------------
+# Python / Backend
+# -----------------------
 __pycache__/
 *.pyc
 .venv/
 .env
 .mypy_cache/
 .pytest_cache/
+.ruff_cache/
+.tox/
+.pytype/
+.pyre/
+.coverage
+coverage.xml
+htmlcov/
 
-# Docker / Logs
+# -----------------------
+# Docker / Logs / Temp
+# -----------------------
 *.log
 docker-storage/
 tmp/
 
+# -----------------------
 # OS / IDE
+# -----------------------
 .DS_Store
 Thumbs.db
 .idea/
 .vscode/
 
-coverage/
-EOF
-
-# npm/pnpm extras
-package-lock.json
-.pnpm-debug.log*
-.npmrc.local
-
-# Dados gerados pelo worker (redundante ao .gitignore local, mas seguro)
+# -----------------------
+# Projeto: dados gerados
+# -----------------------
 apps/validador-orcamento/worker/data/
 apps/validador-orcamento/worker/output/
 
-# Python extra
-.ruff_cache/
-.coverage
-coverage.xml
-.pyre/
-.pytype/
-
-# Python extra
-.ruff_cache/
-.coverage
-coverage.xml
-.pyre/
-.pytype/
-
-# Vite envs locais
+# -----------------------
+# Vite envs locais (não versionar segredos)
+# -----------------------
 apps/portal/.env.local
 apps/portal/.env.*.local
+
+# Permita arquivos de exemplo de env
+!**/.env.example
+EOF
