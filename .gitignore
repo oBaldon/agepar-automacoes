@@ -1,0 +1,30 @@
+# Node
+node_modules/
+dist/
+build/
+.next/
+.storybook-out/
+pnpm-lock.yaml
+yarn.lock
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.env
+.mypy_cache/
+.pytest_cache/
+
+# Docker / Logs
+*.log
+docker-storage/
+tmp/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Front-end bundles
+coverage/
