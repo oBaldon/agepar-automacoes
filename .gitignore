@@ -1,9 +1,9 @@
+cat > .gitignore <<'EOF'
 # Node
 node_modules/
 dist/
 build/
 .next/
-.storybook-out/
 pnpm-lock.yaml
 yarn.lock
 
@@ -26,5 +26,5 @@ Thumbs.db
 .idea/
 .vscode/
 
-# Front-end bundles
 coverage/
+EOF
