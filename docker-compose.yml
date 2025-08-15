@@ -1,0 +1,7 @@
+services:
+  gateway:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./infra/nginx/gateway.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "8080:80"
