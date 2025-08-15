@@ -1,0 +1,30 @@
+{
+  "total_divergencias": 1,
+  "divergencias": [
+    {
+      "pai_codigo": "97064",
+      "pai_desc_a": "MONTAGEM E DESMONTAGEM DE ANDAIME TUBULAR TIPO \"TORRE\" (EXCLUSIVE ANDAIME E LIMPEZA). AF_03/2024",
+      "pai_desc_b": "MONTAGEM E DESMONTAGEM DE ANDAIME TUBULAR TIPO \"TORRE\" (EXCLUSIVE ANDAIME E LIMPEZA). AF_03/2024",
+      "filhos_missing": [
+        "103251"
+      ],
+      "filhos_extra": [
+        "100251"
+      ],
+      "filhos_desc_mismatch": [
+        {
+          "codigo": "88316",
+          "a_desc": "SERVENTE COM ENCARGOS COMPLEMENTARES1",
+          "b_desc": "SERVENTE COM ENCARGOS COMPLEMENTARES"
+        }
+      ]
+    }
+  ],
+  "meta": {
+    "orc": "data/ORÇAMENTO - ACIONAMENTO 01 - REV 05 final.xlsx",
+    "banco_a": "SINAPI",
+    "base": "data/SINAPI_2025_06.xlsx",
+    "base_type": "SINAPI",
+    "sinapi_sheet": "Analítico"
+  }
+}

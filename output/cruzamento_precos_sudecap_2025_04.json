@@ -1,0 +1,34 @@
+{
+  "meta": {
+    "banco": "SUDECAP",
+    "ref_type": "SUDECAP",
+    "orc": "data/ORÇAMENTO - ACIONAMENTO 01 - REV 05 final.xlsx",
+    "ref": "data/SUDECAP_2025_04.xls"
+  },
+  "total_cruzado": 1,
+  "total_divergencias": 1,
+  "cruzado": [
+    {
+      "codigo": "01.12.01",
+      "a_banco": "SUDECAP",
+      "a_desc": "VISTORIA CAUTELAR - ÁREA CONSTRUÍDA <= 100M2",
+      "a_valor": 362.44,
+      "b_desc": "VISTORIA CAUTELAR - ÁREA CONSTRUÍDA <= 100M2",
+      "b_valor": 362.47,
+      "match": true,
+      "dif_abs": 0.03000000000002956,
+      "dif_rel": 8.276547024589498e-05
+    }
+  ],
+  "divergencias": [
+    {
+      "codigo": "01.12.01",
+      "motivos": [
+        "VALOR_DIVERGENTE"
+      ],
+      "dif_abs": 0.03000000000002956,
+      "dif_rel": 8.276547024589498e-05,
+      "dir": "MENOR"
+    }
+  ]
+}

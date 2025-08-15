@@ -1,0 +1,188 @@
+{
+  "meta": {
+    "banco": "SINAPI",
+    "ref_type": "SINAPI",
+    "orc": "data/ORÇAMENTO - ACIONAMENTO 01 - REV 05 final.xlsx",
+    "ref": "data/SINAPI_2025_06.xlsx"
+  },
+  "total_cruzado": 15,
+  "total_divergencias": 1,
+  "cruzado": [
+    {
+      "codigo": "97064",
+      "a_banco": "SINAPI",
+      "a_desc": "MONTAGEM E DESMONTAGEM DE ANDAIME TUBULAR TIPO \"TORRE\" (EXCLUSIVE ANDAIME E LIMPEZA). AF_03/2024",
+      "a_valor": 30.79,
+      "b_desc": "MONTAGEM E DESMONTAGEM DE ANDAIME TUBULAR TIPO \"TORRE\" (EXCLUSIVE ANDAIME E LIMPEZA). AF_03/2024",
+      "b_valor": 30.78,
+      "match": true,
+      "dif_abs": 0.00999999999999801,
+      "dif_rel": 0.00032488628979850586
+    },
+    {
+      "codigo": "100251",
+      "a_banco": "SINAPI",
+      "a_desc": "TRANSPORTE HORIZONTAL MANUAL, DE TUBO DE AÇO CARBONO LEVE OU MÉDIO, PRETO OU GALVANIZADO, COM DIÂMETRO MAIOR QUE 32 MM E MENOR OU IGUAL A 65 MM (UNIDADE: MXKM). AF_07/2019",
+      "a_valor": 16.3,
+      "b_desc": "TRANSPORTE HORIZONTAL MANUAL, DE TUBO DE AÇO CARBONO LEVE OU MÉDIO, PRETO OU GALVANIZADO, COM DIÂMETRO MAIOR QUE 32 MM E MENOR OU IGUAL A 65 MM (UNIDADE: MXKM). AF_07/2019",
+      "b_valor": 16.3,
+      "match": true,
+      "dif_abs": 0.0,
+      "dif_rel": 0.0
+    },
+    {
+      "codigo": "88278",
+      "a_banco": "SINAPI",
+      "a_desc": "MONTADOR DE ESTRUTURA METÁLICA COM ENCARGOS COMPLEMENTARES",
+      "a_valor": 29.66,
+      "b_desc": "MONTADOR DE ESTRUTURA METÁLICA COM ENCARGOS COMPLEMENTARES",
+      "b_valor": 29.66,
+      "match": true,
+      "dif_abs": 0.0,
+      "dif_rel": 0.0
+    },
+    {
+      "codigo": "88316",
+      "a_banco": "SINAPI",
+      "a_desc": "SERVENTE COM ENCARGOS COMPLEMENTARES",
+      "a_valor": 26.65,
+      "b_desc": "SERVENTE COM ENCARGOS COMPLEMENTARES",
+      "b_valor": 26.65,
+      "match": true,
+      "dif_abs": 0.0,
+      "dif_rel": 0.0
+    },
+    {
+      "codigo": "88264",
+      "a_banco": "SINAPI",
+      "a_desc": "ELETRICISTA COM ENCARGOS COMPLEMENTARES",
+      "a_valor": 34.41,
+      "b_desc": "ELETRICISTA COM ENCARGOS COMPLEMENTARES",
+      "b_valor": 34.41,
+      "match": true,
+      "dif_abs": 0.0,
+      "dif_rel": 0.0
+    },
+    {
+      "codigo": "95332",
+      "a_banco": "SINAPI",
+      "a_desc": "CURSO DE CAPACITAÇÃO PARA ELETRICISTA (ENCARGOS COMPLEMENTARES) - HORISTA",
+      "a_valor": 0.9,
+      "b_desc": "CURSO DE CAPACITAÇÃO PARA ELETRICISTA (ENCARGOS COMPLEMENTARES) - HORISTA",
+      "b_valor": 0.9,
+      "match": true,
+      "dif_abs": 0.0,
+      "dif_rel": 0.0
+    },
+    {
+      "codigo": "95332",
+      "a_banco": "SINAPI",
+      "a_desc": "CURSO DE CAPACITAÇÃO PARA ELETRICISTA (ENCARGOS COMPLEMENTARES) - HORISTA",
+      "a_valor": 0.9,
+      "b_desc": "CURSO DE CAPACITAÇÃO PARA ELETRICISTA (ENCARGOS COMPLEMENTARES) - HORISTA",
+      "b_valor": 0.9,
+      "match": true,
+      "dif_abs": 0.0,
+      "dif_rel": 0.0
+    },
+    {
+      "codigo": "95344",
+      "a_banco": "SINAPI",
+      "a_desc": "CURSO DE CAPACITAÇÃO PARA MONTADOR DE ESTRUTURA METÁLICA (ENCARGOS COMPLEMENTARES) - HORISTA",
+      "a_valor": 0.24,
+      "b_desc": "CURSO DE CAPACITAÇÃO PARA MONTADOR DE ESTRUTURA METÁLICA (ENCARGOS COMPLEMENTARES) - HORISTA",
+      "b_valor": 0.24,
+      "match": true,
+      "dif_abs": 0.0,
+      "dif_rel": 0.0
+    },
+    {
+      "codigo": "95378",
+      "a_banco": "SINAPI",
+      "a_desc": "CURSO DE CAPACITAÇÃO PARA SERVENTE (ENCARGOS COMPLEMENTARES) - HORISTA",
+      "a_valor": 0.36,
+      "b_desc": "CURSO DE CAPACITAÇÃO PARA SERVENTE (ENCARGOS COMPLEMENTARES) - HORISTA",
+      "b_valor": 0.36,
+      "match": true,
+      "dif_abs": 0.0,
+      "dif_rel": 0.0
+    },
+    {
+      "codigo": "88278",
+      "a_banco": "SINAPI",
+      "a_desc": "MONTADOR DE ESTRUTURA METÁLICA COM ENCARGOS COMPLEMENTARES",
+      "a_valor": 29.66,
+      "b_desc": "MONTADOR DE ESTRUTURA METÁLICA COM ENCARGOS COMPLEMENTARES",
+      "b_valor": 29.66,
+      "match": true,
+      "dif_abs": 0.0,
+      "dif_rel": 0.0
+    },
+    {
+      "codigo": "95344",
+      "a_banco": "SINAPI",
+      "a_desc": "CURSO DE CAPACITAÇÃO PARA MONTADOR DE ESTRUTURA METÁLICA (ENCARGOS COMPLEMENTARES) - HORISTA",
+      "a_valor": 0.24,
+      "b_desc": "CURSO DE CAPACITAÇÃO PARA MONTADOR DE ESTRUTURA METÁLICA (ENCARGOS COMPLEMENTARES) - HORISTA",
+      "b_valor": 0.24,
+      "match": true,
+      "dif_abs": 0.0,
+      "dif_rel": 0.0
+    },
+    {
+      "codigo": "88316",
+      "a_banco": "SINAPI",
+      "a_desc": "SERVENTE COM ENCARGOS COMPLEMENTARES",
+      "a_valor": 26.65,
+      "b_desc": "SERVENTE COM ENCARGOS COMPLEMENTARES",
+      "b_valor": 26.65,
+      "match": true,
+      "dif_abs": 0.0,
+      "dif_rel": 0.0
+    },
+    {
+      "codigo": "95378",
+      "a_banco": "SINAPI",
+      "a_desc": "CURSO DE CAPACITAÇÃO PARA SERVENTE (ENCARGOS COMPLEMENTARES) - HORISTA",
+      "a_valor": 0.36,
+      "b_desc": "CURSO DE CAPACITAÇÃO PARA SERVENTE (ENCARGOS COMPLEMENTARES) - HORISTA",
+      "b_valor": 0.36,
+      "match": true,
+      "dif_abs": 0.0,
+      "dif_rel": 0.0
+    },
+    {
+      "codigo": "100251",
+      "a_banco": "SINAPI",
+      "a_desc": "TRANSPORTE HORIZONTAL MANUAL, DE TUBO DE AÇO CARBONO LEVE OU MÉDIO, PRETO OU GALVANIZADO, COM DIÂMETRO MAIOR QUE 32 MM E MENOR OU IGUAL A 65 MM (UNIDADE: MXKM). AF_07/2019",
+      "a_valor": 16.3,
+      "b_desc": "TRANSPORTE HORIZONTAL MANUAL, DE TUBO DE AÇO CARBONO LEVE OU MÉDIO, PRETO OU GALVANIZADO, COM DIÂMETRO MAIOR QUE 32 MM E MENOR OU IGUAL A 65 MM (UNIDADE: MXKM). AF_07/2019",
+      "b_valor": 16.3,
+      "match": true,
+      "dif_abs": 0.0,
+      "dif_rel": 0.0
+    },
+    {
+      "codigo": "88316",
+      "a_banco": "SINAPI",
+      "a_desc": "SERVENTE COM ENCARGOS COMPLEMENTARES",
+      "a_valor": 26.65,
+      "b_desc": "SERVENTE COM ENCARGOS COMPLEMENTARES",
+      "b_valor": 26.65,
+      "match": true,
+      "dif_abs": 0.0,
+      "dif_rel": 0.0
+    }
+  ],
+  "divergencias": [
+    {
+      "codigo": "97064",
+      "motivos": [
+        "VALOR_DIVERGENTE"
+      ],
+      "dif_abs": 0.00999999999999801,
+      "dif_rel": 0.00032488628979850586,
+      "dir": "MAIOR"
+    }
+  ]
+}
