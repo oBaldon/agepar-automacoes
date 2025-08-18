@@ -2,9 +2,95 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Base do tema */
 html, body, #root { height: 100%; }
 body {
-  background: var(--color-bg);
-  color: var(--color-text);
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, "Helvetica Neue", Arial);
 }
+
+/* Utilitários com tokens */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow-sm);
+}
+.btn-primary{
+  background: var(--primary);
+  color: var(--primary-contrast);
+  border-radius: calc(var(--radius) * 0.7);
+  padding: 10px 14px;
+  box-shadow: var(--shadow-sm);
+}
+.btn-primary:hover{ filter: brightness(0.98); box-shadow: var(--shadow-md); }
+.btn-primary:disabled{ opacity:.6; cursor:not-allowed; }
+
+/* Toggle de tema */
+.btn-ghost{
+  background: var(--surface);
+  color: var(--text);
+  border: 2px solid var(--border);
+  border-radius: calc(var(--radius) * 0.6);
+  padding: 8px 12px;
+  box-shadow: var(--shadow-md);
+}
+.btn-ghost.small { padding: 6px 8px; }
+.theme-toggle{
+  position: fixed; top: 16px; right: 16px;
+  display: flex; gap: 8px; z-index: 9999;
+}
+.theme-toggle .menu{
+  position: absolute; right: 0; top: 48px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  padding: 6px; display: grid; gap: 6px; min-width: 160px;
+}
+.theme-toggle .menu button{ text-align:left; padding:8px 10px; border-radius:8px; }
+.theme-toggle .menu button:hover{ background: var(--surface-2); }
+
+/* --- Inputs e selects (bonitos, full width) --- */
+input, select, textarea {
+  width: 100%;
+  background: #ffffff;
+  color: #111827; /* preto */
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  outline: none;
+}
+input::placeholder, textarea::placeholder { color: #6b7280; }
+
+/* No tema ESCURO: caixas claras com texto preto (alto contraste) */
+html[data-theme="dark"] input,
+html[data-theme="dark"] select,
+html[data-theme="dark"] textarea {
+  background: #f3f4f6;       /* gray-100 */
+  color: #0a0a0a;            /* quase preto */
+  border-color: #cbd5e1;     /* slate-300 */
+}
+html[data-theme="dark"] input::placeholder,
+html[data-theme="dark"] textarea::placeholder { color: #6b7280; }
+
+/* Layout de campo */
+.field { display: grid; gap: 6px; }
+.label { font-size: 0.85rem; color: var(--muted); }
+
+/* Card de formulário mais elegante */
+.form-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px; box-shadow: var(--shadow-sm); }
+
+/* Botão ícone (toggle) */
+.btn-icon {
+  width: 42px; height: 42px;
+  display: inline-grid; place-items: center;
+  background: var(--surface);
+  color: var(--text);
+  border: 2px solid var(--border);
+  border-radius: 999px;
+  box-shadow: var(--shadow-md);
+}
+.theme-toggle-alone{ position: fixed; top: 16px; right: 16px; z-index: 9999; }

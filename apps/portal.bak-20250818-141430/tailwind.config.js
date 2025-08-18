@@ -3,9 +3,9 @@ export default {
   content: [
     "./index.html",
     "./src/**/*.{ts,tsx}",
-    // componentes do pacote UI no monorepo
     "../../packages/ui/**/*.{ts,tsx}",
+    "!../../**/node_modules/**"
   ],
   theme: { extend: {} },
-  plugins: [],
+  plugins: []
 }

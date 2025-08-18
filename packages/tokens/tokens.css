@@ -1,10 +1,44 @@
-:root{
-  --color-bg:#0b1220;
-  --color-surface:#111827;
-  --color-primary:#06b6d4;
-  --color-primary-contrast:#0b1220;
-  --color-text:#e5e7eb;
-  --color-muted:#9ca3af;
-  --radius:14px;
-  --shadow:0 8px 24px rgba(0,0,0,0.25);
+/* Pacote: @agepar/tokens  — paleta clara suave + dark opcional */
+:root {
+  /* Cores base (light) */
+  --bg:            #f6f7fb;   /* fundo geral, levemente cinza-azulado */
+  --surface:       #ffffff;   /* cartões/inputs */
+  --surface-2:     #f9fafb;   /* áreas sutis (headers, blocks) */
+  --text:          #0f172a;   /* slate-900 */
+  --muted:         #64748b;   /* slate-500 */
+  --border:        #e5e7eb;   /* cinza claro */
+  --primary:       #2563eb;   /* azul amigável */
+  --primary-contrast: #ffffff;
+  --ring:          #93c5fd;   /* azul claro p/ focus */
+  --danger:        #dc2626;
+  --success:       #16a34a;
+
+  /* Raios e sombras suaves */
+  --radius:        14px;
+  --shadow-sm:     0 1px 2px rgba(15,23,42,.06);
+  --shadow-md:     0 6px 18px rgba(15,23,42,.08);
+
+  /* Tipografia/Espaçamento (opcional) */
+  --font-sans:     ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+  --space-1:       4px;
+  --space-2:       8px;
+  --space-3:       12px;
+  --space-4:       16px;
+  --space-5:       20px;
+  --space-6:       24px;
+}
+
+/* Tema escuro opcional (ativar no <html data-theme="dark">) */
+:root[data-theme="dark"] {
+  --bg:            #0b1220;
+  --surface:       #0f172a;
+  --surface-2:     #111827;
+  --text:          #e5e7eb;
+  --muted:         #94a3b8;
+  --border:        #1f2937;
+  --primary:       #60a5fa;
+  --primary-contrast: #0b1220;
+  --ring:          #3b82f6;
+  --danger:        #f87171;
+  --success:       #34d399;
 }

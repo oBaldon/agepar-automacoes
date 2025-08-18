@@ -1,10 +1,22 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt-br">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vite + React + TS</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+    <title>Portal de Automações — Agepar</title>
+    <script>
+      (function(){
+        try{
+          var k="theme";
+          var v=localStorage.getItem(k)||"system";
+          var m=window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+          var dark = v==="dark" || (v==="system" && m);
+          var el=document.documentElement;
+          if (dark) el.setAttribute("data-theme","dark");
+          else el.removeAttribute("data-theme");
+        }catch(e){}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

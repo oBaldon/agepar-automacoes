@@ -2,13 +2,13 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Literal, Optional, Any
-import os, json
+import os
 from redis import from_url as redis_from_url
 from rq import Queue, job
 
 app = FastAPI(title="Validador de Orçamento API")
 
-# CORS (dev)
+# CORS para dev (pode sobrescrever via env CORS_ORIGINS)
 origins = os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
 app.add_middleware(
     CORSMiddleware,
@@ -51,7 +51,7 @@ JobCreate = PrecosManual | PrecosAuto | Estrutura
 class JobOut(BaseModel):
     id: str
     status: str
-    artifact: Optional[Any] = None  # reservado p/ futuro (MinIO)
+    artifact: Optional[Any] = None  # opcional (para futuro)
 
 @app.get("/health")
 def health():
@@ -66,19 +66,7 @@ def create_job(body: JobCreate):
     }
     fn = target_map[body.op]
     payload = body.model_dump(exclude={"op"})  # não enviar 'op' ao worker
-    j = _q.enqueue(
-        fn,
-        kwargs=payload,
-        job_timeout="1h",
-        result_ttl=24*3600,
-        failure_ttl=7*24*3600,
-    )
-    # guardar caminhos úteis para leitura depois
-    if "out" in payload:
-        j.meta["out"] = payload["out"]
-    if "out_dir" in payload:
-        j.meta["out_dir"] = payload["out_dir"]
-    j.save_meta()
+    j = _q.enqueue(fn, kwargs=payload, job_timeout="1h")
     return JobOut(id=j.id, status=j.get_status())
 
 @app.get("/jobs/{job_id}", response_model=JobOut)
@@ -88,21 +76,3 @@ def get_job(job_id: str):
     except Exception:
         raise HTTPException(status_code=404, detail="job not found")
     return JobOut(id=j.id, status=j.get_status(), artifact=j.meta.get("artifact"))
-
-@app.get("/jobs/{job_id}/result")
-def get_job_result(job_id: str):
-    try:
-        j = job.Job.fetch(job_id, connection=_redis)
-    except Exception:
-        raise HTTPException(status_code=404, detail="job not found")
-    out = j.meta.get("out")
-    if not out:
-        raise HTTPException(status_code=404, detail="no 'out' registered for this job")
-    if not os.path.exists(out):
-        raise HTTPException(status_code=404, detail=f"result file not found: {out}")
-    try:
-        with open(out, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"failed to read result: {e}")
-    return data
