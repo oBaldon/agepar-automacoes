@@ -21,3 +21,5 @@ tzdata==2025.2
 urllib3==2.5.0
 vulture==2.14
 xlrd==2.0.2
+rq==1.16.2
+redis==5.0.7

@@ -4,8 +4,8 @@
     "ref_type": "SINAPI",
     "tol_rel": 0.0,
     "valor_scale": 1.0,
-    "orc": "data/ORÇAMENTO - ACIONAMENTO 01 - REV 05 final.xlsx",
-    "ref": "data/SINAPI_2025_06.xlsx"
+    "orc": "/app/data/ORÇAMENTO - ACIONAMENTO 01 - REV 05 final.xlsx",
+    "ref": "/app/data/SINAPI_2025_06.xlsx"
   },
   "total_cruzado": 15,
   "total_divergencias": 4,

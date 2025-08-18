@@ -4,8 +4,8 @@
     "ref_type": "SUDECAP",
     "tol_rel": 0.0,
     "valor_scale": 1.0,
-    "orc": "data/ORÇAMENTO - ACIONAMENTO 01 - REV 05 final.xlsx",
-    "ref": "data/SUDECAP_2025_04.xls"
+    "orc": "/app/data/ORÇAMENTO - ACIONAMENTO 01 - REV 05 final.xlsx",
+    "ref": "/app/data/SUDECAP_2025_04.xls"
   },
   "total_cruzado": 1,
   "total_divergencias": 1,

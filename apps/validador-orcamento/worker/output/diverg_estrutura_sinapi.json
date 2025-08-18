@@ -1,5 +1,5 @@
 {
-  "total_divergencias": 1,
+  "total_divergencias": 2,
   "divergencias": [
     {
       "pai_codigo": "97064",
@@ -18,12 +18,29 @@
           "b_desc": "SERVENTE COM ENCARGOS COMPLEMENTARES"
         }
       ]
+    },
+    {
+      "pai_codigo": "882645",
+      "pai_desc_a": "ELETRICISTA COM ENCARGOS COMPLEMENTARES",
+      "pai_desc_b": null,
+      "filhos_missing": [
+        "2436",
+        "37370",
+        "37371",
+        "37372",
+        "37373",
+        "43460",
+        "43484",
+        "95332"
+      ],
+      "filhos_extra": [],
+      "filhos_desc_mismatch": []
     }
   ],
   "meta": {
-    "orc": "data/ORÇAMENTO - ACIONAMENTO 01 - REV 05 final.xlsx",
+    "orc": "/app/data/ORÇAMENTO - ACIONAMENTO 01 - REV 05 final.xlsx",
     "banco_a": "SINAPI",
-    "base": "data/SINAPI_2025_06.xlsx",
+    "base": "/app/data/SINAPI_2025_06.xlsx",
     "base_type": "SINAPI",
     "sinapi_sheet": "Analítico"
   }
