@@ -1,10 +1,9 @@
 /** @type {import('tailwindcss').Config} */
-export default {
+module.exports = {
   content: [
     "./index.html",
     "./src/**/*.{ts,tsx}",
-    // componentes do pacote UI no monorepo
-    "../../packages/ui/**/*.{ts,tsx}",
+    "./node_modules/@agepar/ui/dist/**/*.{js,jsx}",
   ],
   theme: { extend: {} },
   plugins: [],

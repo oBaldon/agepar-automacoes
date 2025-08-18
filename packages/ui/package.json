@@ -3,7 +3,26 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "main": "./index.tsx",
-  "peerDependencies": { "react": "^18.2.0", "react-dom": "^18.2.0" },
-  "dependencies": { "clsx": "^2.1.1" }
+  "main": "dist/index.cjs",
+  "peerDependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.10",
+    "@types/react-dom": "^19.1.7",
+    "tsup": "^8.5.0",
+    "typescript": "~5.8.3"
+  },
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup"
+  }
 }
