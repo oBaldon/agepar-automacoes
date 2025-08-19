@@ -91,18 +91,82 @@ def get_job(job_id: str):
 
 @app.get("/jobs/{job_id}/result")
 def get_job_result(job_id: str):
+    """
+    Retorna o(s) JSON(s) de resultado.
+    - Se o job tiver meta 'out': devolve o JSON único.
+    - Se tiver meta 'out_dir': procura os JSONs gerados (SINAPI/SUDECAP) e
+      retorna um pacote consolidado.
+    """
     try:
         j = job.Job.fetch(job_id, connection=_redis)
     except Exception:
         raise HTTPException(status_code=404, detail="job not found")
-    out = j.meta.get("out")
-    if not out:
-        raise HTTPException(status_code=404, detail="no 'out' registered for this job")
-    if not os.path.exists(out):
-        raise HTTPException(status_code=404, detail=f"result file not found: {out}")
-    try:
-        with open(out, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"failed to read result: {e}")
-    return data
+
+    meta = j.meta or {}
+
+    # Caso 1: resultado único em 'out'
+    out = meta.get("out")
+    if out:
+        if not os.path.exists(out):
+            raise HTTPException(status_code=404, detail=f"result file not found: {out}")
+        try:
+            with open(out, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"failed to read result: {e}")
+
+    # Caso 2: modo automático: múltiplos arquivos em 'out_dir'
+    out_dir = meta.get("out_dir")
+    if out_dir:
+        if not os.path.isdir(out_dir):
+            raise HTTPException(status_code=404, detail=f"result directory not found: {out_dir}")
+
+        # Lista todos .json e escolhe os mais recentes de SINAPI/SUDECAP
+        try:
+            json_files = []
+            for name in os.listdir(out_dir):
+                if name.lower().endswith(".json"):
+                    full = os.path.join(out_dir, name)
+                    try:
+                        mtime = os.path.getmtime(full)
+                    except Exception:
+                        continue
+                    json_files.append((mtime, name, full))
+
+            if not json_files:
+                raise HTTPException(status_code=404, detail="no JSON results found in out_dir")
+
+            # mais recentes primeiro
+            json_files.sort(key=lambda x: x[0], reverse=True)
+
+            sinapi_json = None
+            sudecap_json = None
+            files_list = []
+
+            for _mt, nm, path in json_files:
+                files_list.append({"name": nm, "path": path})
+                ln = nm.lower()
+                try:
+                    if "sinapi" in ln and sinapi_json is None:
+                        with open(path, "r", encoding="utf-8") as f:
+                            sinapi_json = json.load(f)
+                    elif "sudecap" in ln and sudecap_json is None:
+                        with open(path, "r", encoding="utf-8") as f:
+                            sudecap_json = json.load(f)
+                except Exception:
+                    # ignora leitura problemática de algum arquivo avulso
+                    pass
+
+            return {
+                "mode": "precos_auto",
+                "sinapi": sinapi_json,
+                "sudecap": sudecap_json,
+                "files": files_list
+            }
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"failed to collect auto results: {e}")
+
+    # Sem 'out' e sem 'out_dir'
+    raise HTTPException(status_code=404, detail="no 'out' or 'out_dir' registered for this job")
