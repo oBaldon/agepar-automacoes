@@ -15,14 +15,19 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 
 # 2) código
 COPY src ./src
-COPY scripts ./scripts
+# (opcional) se não usa mais, remova a cópia de 'scripts'
+# COPY scripts ./scripts
 
-# 3) dirs de trabalho (onde seus jobs leem/escrevem)
+# 3) dirs de trabalho
 RUN mkdir -p /app/data /app/output
 
-# 4) envs padrão (pode sobrescrever em runtime)
-ENV QUEUE_NAME=validador \
-    REDIS_URL=redis://redis:6379/1
+# 4) (opcional, mas útil) timezone fixo para gerar 'generated_at' em -03:00
+# RUN apt-get update && apt-get install -y --no-install-recommends tzdata && \
+#     ln -fs /usr/share/zoneinfo/America/Sao_Paulo /etc/localtime && \
+#     dpkg-reconfigure -f noninteractive tzdata && \
+#     rm -rf /var/lib/apt/lists/*
+# ENV TZ=America/Sao_Paulo
 
-# 5) entra no runner programático do RQ (sem Click, sem warnings)
-ENTRYPOINT ["python","-m","src.runner"]
+# 5) Entrypoint em modo CLI (aceita subcomandos 'precos-auto' e 'estrutura-auto')
+ENTRYPOINT ["python","-m","src.cli"]
+CMD ["--help"]

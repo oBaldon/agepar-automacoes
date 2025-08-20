@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   gateway:
     image: nginx:1.27-alpine
@@ -5,3 +7,45 @@ services:
       - ./infra/nginx/gateway.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
       - "8080:80"
+    depends_on:
+      - portal
+      - validador-api
+    networks: [appnet]
+
+  portal:
+    build:
+      context: ./apps/portal
+      dockerfile: Dockerfile
+    expose:
+      - "3000"
+    environment:
+      - API_URL=http://gateway/api   # se o front usa esta var
+    networks: [appnet]
+
+  validador-api:
+    build:
+      context: ./apps/validador-orcamento/api
+      dockerfile: Dockerfile
+    expose:
+      - "8000"
+    volumes:
+      - ./apps/validador-orcamento/worker/output:/app/output:ro  # API só lê
+    environment:
+      - OUTPUT_DIR=/app/output
+    networks: [appnet]
+
+  validador-worker:
+    build:
+      context: ./apps/validador-orcamento/worker
+      dockerfile: Dockerfile
+    entrypoint: ["python","-m","src.cli"]
+    command: ["--help"]   # não roda nada por padrão
+    volumes:
+      - ./apps/validador-orcamento/worker/data:/app/data:ro
+      - ./apps/validador-orcamento/worker/output:/app/output
+    networks: [appnet]
+    profiles: ["worker"]  # só sobe quando você pedir
+
+networks:
+  appnet:
+    driver: bridge
