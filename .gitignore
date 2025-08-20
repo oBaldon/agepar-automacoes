@@ -32,8 +32,10 @@ htmlcov/
 # Docker / Logs / Temp
 # -----------------------
 *.log
+.*
 docker-storage/
 tmp/
+*.gz
 
 # -----------------------
 # OS / IDE
