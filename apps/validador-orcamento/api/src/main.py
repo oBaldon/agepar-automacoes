@@ -1,172 +1,228 @@
-from fastapi import FastAPI, HTTPException
+from __future__ import annotations
+
+import os
+from pathlib import Path
+from typing import Optional, Dict
+
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from typing import Literal, Optional, Any
-import os, json
-from redis import from_url as redis_from_url
-from rq import Queue, job
+import json
+import tempfile
+import shutil
 
-app = FastAPI(title="Validador de Orçamento API")
+app = FastAPI(title="Validador de Orçamento API", version="2.0")
 
-# CORS (dev)
-origins = os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
+# CORS (ajuste via env se quiser)
+origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[o.strip() for o in origins if o.strip()],
+    allow_origins=origins or ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/1")
-QUEUE_NAME = os.getenv("QUEUE_NAME", "validador")
-_redis = redis_from_url(REDIS_URL)
-_q = Queue(QUEUE_NAME, connection=_redis)
+OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", "/app/output")).resolve()
+DATA_DIR   = Path(os.getenv("DATA_DIR", "/app/data")).resolve()
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-class PrecosManual(BaseModel):
-    op: Literal["precos_manual"]
+
+class PrecosAutoJSONIn(BaseModel):
+    orc: str = Field(..., description="Caminho do Orçamento (no container)")
+    sudecap: str = Field(..., description="Caminho SUDECAP (no container)")
+    sinapi: str = Field(..., description="Caminho SINAPI (no container)")
+    tol_rel: float = Field(0.05, description="Tolerância relativa (0.05 = 5%)")
+    out_dir: Optional[str] = Field(None, description="Saída (padrão: /app/output)")
+
+
+class EstruturaAutoJSONIn(BaseModel):
     orc: str
-    ref: str
-    ref_type: Literal["SINAPI","SUDECAP"]
-    banco: Literal["SINAPI","SUDECAP"]
-    tol_rel: float = Field(0)
-    out: str
+    sudecap: str
+    sinapi: str
+    out_dir: Optional[str] = None
 
-class PrecosAuto(BaseModel):
-    op: Literal["precos_auto"]
-    orc: str
-    tol_rel: float = Field(0)
-    out_dir: str
 
-class Estrutura(BaseModel):
-    op: Literal["estrutura"]
-    orc: str
-    banco_a: Literal["SINAPI","SUDECAP"]
-    base: str
-    base_type: Literal["SINAPI","SUDECAP"]
-    out: str
+def _load_worker_symbols():
+    """
+    Tenta importar os adapters e o aggregate do 'worker'.
+    Se não estiverem na imagem da API, retornamos 501 para os endpoints de processamento.
+    """
+    try:
+        from src.cruzar_orcamento.adapters.orcamento import load_orcamento as load_orc_precos
+        from src.cruzar_orcamento.adapters.sinapi import load_sinapi_ccd_pr as load_sinapi_precos
+        from src.cruzar_orcamento.adapters.sudecap import load_sudecap as load_sudecap_precos
 
-JobCreate = PrecosManual | PrecosAuto | Estrutura
+        from src.cruzar_orcamento.adapters.estrutura_orcamento import load_estrutura_orcamento as load_orc_estr
+        from src.cruzar_orcamento.adapters.estrutura_sinapi import load_estrutura_sinapi_analitico as load_sinapi_estr
+        from src.cruzar_orcamento.adapters.estrutura_sudecap import load_estrutura_sudecap as load_sud_estr
 
-class JobOut(BaseModel):
-    id: str
-    status: str
-    artifact: Optional[Any] = None  # reservado p/ futuro (MinIO)
+        from src.cruzar_orcamento.core.aggregate import consolidar_precos, consolidar_estrutura
+        from src.cruzar_orcamento.exporters.json_compacto import export_json
+    except Exception as e:
+        raise HTTPException(status_code=501, detail=f"Código do worker não está disponível nesta imagem: {e}")
+
+    return {
+        "load_orc_precos": load_orc_precos,
+        "load_sinapi_precos": load_sinapi_precos,
+        "load_sudecap_precos": load_sudecap_precos,
+        "load_orc_estr": load_orc_estr,
+        "load_sinapi_estr": load_sinapi_estr,
+        "load_sud_estr": load_sud_estr,
+        "consolidar_precos": consolidar_precos,
+        "consolidar_estrutura": consolidar_estrutura,
+        "export_json": export_json,
+    }
+
 
 @app.get("/health")
 def health():
-    return {"status":"ok","env": os.getenv("ENV","dev")}
+    return {"ok": True}
 
-@app.post("/jobs", response_model=JobOut)
-def create_job(body: JobCreate):
-    target_map = {
-        "precos_manual": "src.tasks.run_precos_manual",
-        "precos_auto":   "src.tasks.run_precos_auto",
-        "estrutura":     "src.tasks.validar_estrutura",
-    }
-    fn = target_map[body.op]
-    payload = body.model_dump(exclude={"op"})  # não enviar 'op' ao worker
-    j = _q.enqueue(
-        fn,
-        kwargs=payload,
-        job_timeout="1h",
-        result_ttl=24*3600,
-        failure_ttl=7*24*3600,
-    )
-    # guardar caminhos úteis para leitura depois
-    if "out" in payload:
-        j.meta["out"] = payload["out"]
-    if "out_dir" in payload:
-        j.meta["out_dir"] = payload["out_dir"]
-    j.save_meta()
-    return JobOut(id=j.id, status=j.get_status())
 
-@app.get("/jobs/{job_id}", response_model=JobOut)
-def get_job(job_id: str):
+def _save_uploads(files: Dict[str, UploadFile]) -> Dict[str, Path]:
+    tmpdir = Path(tempfile.mkdtemp(prefix="upload_", dir=str(DATA_DIR)))
+    saved: Dict[str, Path] = {}
     try:
-        j = job.Job.fetch(job_id, connection=_redis)
+        for key, uf in files.items():
+            if uf is None:
+                continue
+            dest = tmpdir / uf.filename
+            with dest.open("wb") as f:
+                shutil.copyfileobj(uf.file, f)
+            saved[key] = dest
+        return saved
     except Exception:
-        raise HTTPException(status_code=404, detail="job not found")
-    return JobOut(id=j.id, status=j.get_status(), artifact=j.meta.get("artifact"))
+        shutil.rmtree(tmpdir, ignore_errors=True)
+        raise
 
-@app.get("/jobs/{job_id}/result")
-def get_job_result(job_id: str):
-    """
-    Retorna o(s) JSON(s) de resultado.
-    - Se o job tiver meta 'out': devolve o JSON único.
-    - Se tiver meta 'out_dir': procura os JSONs gerados (SINAPI/SUDECAP) e
-      retorna um pacote consolidado.
-    """
+
+# ================= PREÇOS: duas variantes =================
+
+@app.post("/precos/auto/json")
+def precos_auto_json(body: PrecosAutoJSONIn):
+    syms = _load_worker_symbols()
+
+    orc_path = Path(body.orc).resolve()
+    sud_path = Path(body.sudecap).resolve()
+    sin_path = Path(body.sinapi).resolve()
+    out_dir  = Path(body.out_dir or OUTPUT_DIR).resolve()
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    for p in [orc_path, sud_path, sin_path]:
+        if not p.exists():
+            raise HTTPException(status_code=404, detail=f"arquivo não encontrado: {p}")
+
+    a = syms["load_orc_precos"](orc_path)
+    b_sud = syms["load_sudecap_precos"](sud_path)
+    b_sin = syms["load_sinapi_precos"](sin_path)
+
+    payload = syms["consolidar_precos"](a, b_sin, b_sud, tol_rel=body.tol_rel, comparar_descricao=True)
+    path = syms["export_json"](payload, out_dir / "precos.json")
+    return {"ok": True, "artifact": str(path), "payload": payload}
+
+
+@app.post("/precos/auto/upload")
+def precos_auto_upload(
+    orc: UploadFile = File(...),
+    sudecap: UploadFile = File(...),
+    sinapi: UploadFile = File(...),
+    tol_rel: float = Form(0.05),
+):
+    syms = _load_worker_symbols()
+    saved = _save_uploads({"orc": orc, "sudecap": sudecap, "sinapi": sinapi})
+
+    a = syms["load_orc_precos"](saved["orc"])
+    b_sud = syms["load_sudecap_precos"](saved["sudecap"])
+    b_sin = syms["load_sinapi_precos"](saved["sinapi"])
+
+    payload = syms["consolidar_precos"](a, b_sin, b_sud, tol_rel=float(tol_rel), comparar_descricao=True)
+    path = syms["export_json"](payload, OUTPUT_DIR / "precos.json")
+    return {"ok": True, "artifact": str(path), "payload": payload}
+
+
+# ================= ESTRUTURA: duas variantes =================
+
+@app.post("/estrutura/auto/json")
+def estrutura_auto_json(body: EstruturaAutoJSONIn):
+    syms = _load_worker_symbols()
+
+    orc_path = Path(body.orc).resolve()
+    sud_path = Path(body.sudecap).resolve()
+    sin_path = Path(body.sinapi).resolve()
+    out_dir  = Path(body.out_dir or OUTPUT_DIR).resolve()
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    for p in [orc_path, sud_path, sin_path]:
+        if not p.exists():
+            raise HTTPException(status_code=404, detail=f"arquivo não encontrado: {p}")
+
+    a = syms["load_orc_estr"](orc_path)
+    b_sud = syms["load_sud_estr"](sud_path)
+    b_sin = syms["load_sinapi_estr"](sin_path)
+
+    payload = syms["consolidar_estrutura"](a, b_sin, b_sud)
+    path = syms["export_json"](payload, out_dir / "estrutura.json")
+    return {"ok": True, "artifact": str(path), "payload": payload}
+
+
+@app.post("/estrutura/auto/upload")
+def estrutura_auto_upload(
+    orc: UploadFile = File(...),
+    sudecap: UploadFile = File(...),
+    sinapi: UploadFile = File(...),
+):
+    syms = _load_worker_symbols()
+    saved = _save_uploads({"orc": orc, "sudecap": sudecap, "sinapi": sinapi})
+
+    a = syms["load_orc_estr"](saved["orc"])
+    b_sud = syms["load_sud_estr"](saved["sudecap"])
+    b_sin = syms["load_sinapi_estr"](saved["sinapi"])
+
+    payload = syms["consolidar_estrutura"](a, b_sin, b_sud)
+    path = syms["export_json"](payload, OUTPUT_DIR / "estrutura.json")
+    return {"ok": True, "artifact": str(path), "payload": payload}
+
+
+# ==================== READ-ONLY ====================
+
+@app.get("/precos")
+def get_precos():
+    p = OUTPUT_DIR / "precos.json"
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="precos.json não encontrado")
     try:
-        j = job.Job.fetch(job_id, connection=_redis)
-    except Exception:
-        raise HTTPException(status_code=404, detail="job not found")
+        with p.open("r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"erro lendo {p}: {e}")
 
-    meta = j.meta or {}
 
-    # Caso 1: resultado único em 'out'
-    out = meta.get("out")
-    if out:
-        if not os.path.exists(out):
-            raise HTTPException(status_code=404, detail=f"result file not found: {out}")
+@app.get("/estrutura")
+def get_estrutura():
+    p = OUTPUT_DIR / "estrutura.json"
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="estrutura.json não encontrado")
+    try:
+        with p.open("r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"erro lendo {p}: {e}")
+
+
+@app.get("/files")
+def list_files():
+    files = []
+    for p in sorted(OUTPUT_DIR.glob("*.json")):
         try:
-            with open(out, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"failed to read result: {e}")
-
-    # Caso 2: modo automático: múltiplos arquivos em 'out_dir'
-    out_dir = meta.get("out_dir")
-    if out_dir:
-        if not os.path.isdir(out_dir):
-            raise HTTPException(status_code=404, detail=f"result directory not found: {out_dir}")
-
-        # Lista todos .json e escolhe os mais recentes de SINAPI/SUDECAP
-        try:
-            json_files = []
-            for name in os.listdir(out_dir):
-                if name.lower().endswith(".json"):
-                    full = os.path.join(out_dir, name)
-                    try:
-                        mtime = os.path.getmtime(full)
-                    except Exception:
-                        continue
-                    json_files.append((mtime, name, full))
-
-            if not json_files:
-                raise HTTPException(status_code=404, detail="no JSON results found in out_dir")
-
-            # mais recentes primeiro
-            json_files.sort(key=lambda x: x[0], reverse=True)
-
-            sinapi_json = None
-            sudecap_json = None
-            files_list = []
-
-            for _mt, nm, path in json_files:
-                files_list.append({"name": nm, "path": path})
-                ln = nm.lower()
-                try:
-                    if "sinapi" in ln and sinapi_json is None:
-                        with open(path, "r", encoding="utf-8") as f:
-                            sinapi_json = json.load(f)
-                    elif "sudecap" in ln and sudecap_json is None:
-                        with open(path, "r", encoding="utf-8") as f:
-                            sudecap_json = json.load(f)
-                except Exception:
-                    # ignora leitura problemática de algum arquivo avulso
-                    pass
-
-            return {
-                "mode": "precos_auto",
-                "sinapi": sinapi_json,
-                "sudecap": sudecap_json,
-                "files": files_list
-            }
-        except HTTPException:
-            raise
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"failed to collect auto results: {e}")
-
-    # Sem 'out' e sem 'out_dir'
-    raise HTTPException(status_code=404, detail="no 'out' or 'out_dir' registered for this job")
+            stat = p.stat()
+            files.append({
+                "name": p.name,
+                "path": str(p),
+                "size": stat.st_size,
+                "mtime": stat.st_mtime,
+            })
+        except Exception:
+            continue
+    return {"output_dir": str(OUTPUT_DIR), "files": files}
