@@ -1,33 +1,39 @@
+# apps/validador-orcamento/worker/Dockerfile
 FROM python:3.12-slim
 
+# ---- ambiente básico
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
+    TZ=UTC \
     PYTHONPATH=/app
 
 WORKDIR /app
 
-# 1) deps
+# ---- deps (camada cacheável)
 COPY requirements.txt .
-RUN pip install --upgrade pip && pip install -r requirements.txt
+RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
-# 2) código
+# ---- código
 COPY src ./src
-# (opcional) se não usa mais, remova a cópia de 'scripts'
-# COPY scripts ./scripts
 
-# 3) dirs de trabalho
+# ---- dirs de trabalho
 RUN mkdir -p /app/data /app/output
 
-# 4) (opcional, mas útil) timezone fixo para gerar 'generated_at' em -03:00
-# RUN apt-get update && apt-get install -y --no-install-recommends tzdata && \
-#     ln -fs /usr/share/zoneinfo/America/Sao_Paulo /etc/localtime && \
-#     dpkg-reconfigure -f noninteractive tzdata && \
-#     rm -rf /var/lib/apt/lists/*
-# ENV TZ=America/Sao_Paulo
+# ---- envs default (podem ser sobrescritos no run)
+ENV QUEUE_NAME=validador \
+    REDIS_URL=redis://redis:6379/1
 
-# 5) Entrypoint em modo CLI (aceita subcomandos 'precos-auto' e 'estrutura-auto')
-ENTRYPOINT ["python","-m","src.cli"]
-CMD ["--help"]
+# (opcional) sinal mais amigável p/ parada
+STOPSIGNAL SIGTERM
+
+# (opcional) healthcheck simples: verifica se o Redis está acessível
+HEALTHCHECK --interval=30s --timeout=3s --retries=3 CMD \
+  python -c "from redis import Redis; import os,sys; \
+r=Redis.from_url(os.getenv('REDIS_URL','redis://redis:6379/1')); \
+r.ping() or sys.exit(1)" || exit 1
+
+# ---- inicia o worker programaticamente (o runner já espera o Redis)
+ENTRYPOINT ["python","-m","src.runner"]
