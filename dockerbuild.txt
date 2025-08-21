@@ -1,0 +1,67 @@
+# =========[ 0) Vars ]=========
+ROOT="$PWD"
+DATA="$ROOT/apps/validador-orcamento/worker/data"
+OUT="$ROOT/apps/validador-orcamento/worker/output"
+
+# =========[ 1) Network ]=========
+docker network ls | grep -q 'agepar-automacoes_default' || \
+  docker network create agepar-automacoes_default
+
+# =========[ 2) Redis ]=========
+docker rm -f redis 2>/dev/null || true
+docker run -d --name redis --restart unless-stopped \
+  --network agepar-automacoes_default \
+  -p 6379:6379 \
+  redis:7-alpine
+
+# =========[ 3) Worker ]=========
+cd "$ROOT/apps/validador-orcamento/worker"
+docker build -t agepar/validador-worker:dev .
+docker rm -f validador-worker 2>/dev/null || true
+docker run -d --name validador-worker --restart unless-stopped \
+  --network agepar-automacoes_default \
+  -e REDIS_URL="redis://redis:6379/1" \
+  -e QUEUE_NAME="validador" \
+  -v "$DATA:/app/data:ro" \
+  -v "$OUT:/app/output" \
+  agepar/validador-worker:dev
+
+# =========[ 4) API ]=========
+cd "$ROOT/apps/validador-orcamento/api"
+docker build -t agepar/validador-api:dev .
+docker rm -f validador-api 2>/dev/null || true
+docker run -d --name validador-api --restart unless-stopped \
+  --network agepar-automacoes_default \
+  -p 8001:8000 \
+  -e REDIS_URL="redis://redis:6379/1" \
+  -e QUEUE_NAME="validador" \
+  -e CORS_ORIGINS="http://10.59.1.81:5173,http://192.168.18.187:5173,http://localhost:5173" \
+  -v "$OUT:/app/output:ro" \
+  agepar/validador-api:dev
+
+# =========[ 5) Health ]=========
+curl -s http://localhost:8001/health | jq .
+docker exec -it validador-api getent hosts redis
+
+# =========[ 6) Fluxo JOBS ]=========
+# Criar job (caminhos do worker)
+JOB_ID=$(
+curl -s http://localhost:8001/jobs \
+  -H 'content-type: application/json' \
+  -d '{
+    "op": "precos_auto",
+    "orc": "data/orcamento.xlsx",
+    "sudecap": "data/sudecap_preco.xls",
+    "sinapi": "data/sinapi_ccd.xlsx",
+    "tol_rel": 0.05,
+    "comparar_desc": true,
+    "out_dir": "output"
+  }' | jq -r .id
+)
+echo "Job: $JOB_ID"
+
+# Status
+curl -s "http://localhost:8001/jobs/$JOB_ID" | jq .
+
+# Resultado
+curl -s "http://localhost:8001/jobs/$JOB_ID}/result" | jq .
