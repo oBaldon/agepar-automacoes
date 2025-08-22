@@ -13,6 +13,35 @@ import { pushRecent } from "../lib/recentJobs";
 
 type Op = "precos_auto" | "estrutura_auto";
 
+// Links úteis configuráveis via .env (Vite)
+const LINKS_UTEIS: Array<{ label: string; url?: string; hint?: string }> = [
+  {
+    label: "SINAPI – relatórios mensais",
+    url: import.meta.env.VITE_LINK_SINAPI as string | undefined,
+    hint: "Defina VITE_LINK_SINAPI no .env",
+  },
+  {
+    label: "SUDECAP – tabelas de preços",
+    url: import.meta.env.VITE_LINK_SUDECAP_PRECO as string | undefined,
+    hint: "Defina VITE_LINK_SUDECAP_PRECO no .env",
+  },
+  {
+    label: "SUDECAP – composições de serviços",
+    url: import.meta.env.VITE_API_SUDECAP_COMPOSICAO as string | undefined,
+    hint: "Defina VITE_API_SUDECAP_COMPOSICAO no .env",
+  },
+  {
+    label: "CPOS/CDHU – catálogo",
+    url: import.meta.env.VITE_LINK_CPOS as string | undefined,
+    hint: "Defina VITE_LINK_CPOS no .env",
+  },
+  {
+    label: "SBC / TCPO",
+    url: import.meta.env.VITE_LINK_SBC as string | undefined,
+    hint: "Defina VITE_LINK_SBC no .env",
+  },
+];
+
 export default function ValidadorOrcamentoPage() {
   const nav = useNavigate();
 
@@ -207,6 +236,29 @@ export default function ValidadorOrcamentoPage() {
           <code>data/arquivo.xlsx</code> e <code>output</code>.
         </p>
       </form>
+
+      {/* Bloco de links úteis */}
+      <section className="form-card">
+        <h2 className="text-lg font-medium mb-2">Links úteis</h2>
+        <ul className="list-disc ml-5 space-y-1 text-sm">
+          {LINKS_UTEIS.map(({ label, url, hint }) => (
+            <li key={label}>
+              {url ? (
+                <a href={url} target="_blank" rel="noreferrer" className="text-blue-600 underline">
+                  {label}
+                </a>
+              ) : (
+                <span className="opacity-70">{label}</span>
+              )}
+              {!url && hint && <span className="ml-2 text-xs opacity-60">({hint})</span>}
+            </li>
+          ))}
+        </ul>
+        <p className="text-xs text-[var(--muted)] mt-2">
+          Configure os endereços no arquivo <code>.env</code> do front-end (ex.:{" "}
+          <code>VITE_LINK_SINAPI</code>, <code>VITE_LINK_SUDECAP</code>…).
+        </p>
+      </section>
     </main>
   );
 }
