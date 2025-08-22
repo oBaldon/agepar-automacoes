@@ -4,14 +4,14 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-# RQ / Redis (somente na API cliente do Redis; o código do worker é carregado lá)
+# RQ / Redis
 from redis import Redis
 from rq import Queue
 from rq.job import Job
@@ -26,9 +26,11 @@ DATA_DIR = Path(os.getenv("DATA_DIR") or (APP_ROOT / "data"))
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/1")
 QUEUE_NAME = os.getenv("QUEUE_NAME", "validador")
 
-CORS_ORIGINS = [
-    o.strip() for o in os.getenv("CORS_ORIGINS", "*").split(",")
-] if os.getenv("CORS_ORIGINS") else ["*"]
+CORS_ORIGINS = (
+    [o.strip() for o in os.getenv("CORS_ORIGINS", "*").split(",")]
+    if os.getenv("CORS_ORIGINS")
+    else ["*"]
+)
 
 app = FastAPI(title="Validador API")
 
@@ -38,7 +40,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 # ---------------------------------------------------------------------
 # Helpers
@@ -52,7 +53,6 @@ def _read_json(path: Path):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Falha ao ler {path.name}: {e}")
 
-
 def _queue() -> Queue:
     conn = Redis.from_url(
         REDIS_URL,
@@ -62,11 +62,29 @@ def _queue() -> Queue:
     )
     return Queue(name=QUEUE_NAME, connection=conn)
 
+def _latest_by_prefix(prefix: str) -> Optional[Path]:
+    """
+    Retorna o arquivo JSON mais recente em OUTPUT_DIR cujo nome comece com <prefix>.
+    Compatível com nomeações antigas ("precos.json"/"estrutura.json") e novas
+    ("precos_<job>_<ts>.json").
+    """
+    if not OUTPUT_DIR.exists():
+        return None
+    # 1) procura pelo padrão com timestamp
+    cands = sorted(
+        OUTPUT_DIR.glob(f"{prefix}_*.json"),
+        key=lambda p: p.stat().st_mtime if p.exists() else 0,
+        reverse=True,
+    )
+    if cands:
+        return cands[0]
+    # 2) fallback para nome fixo legado
+    legacy = OUTPUT_DIR / f"{prefix}.json"
+    return legacy if legacy.exists() else None
 
 # ---------------------------------------------------------------------
-# Rotas simples (read-only atuais)
+# Rotas simples
 # ---------------------------------------------------------------------
-# em apps/validador-orcamento/api/src/main.py
 @app.get("/health")
 def health():
     info = {"ok": True, "output_dir": str(OUTPUT_DIR), "queue": QUEUE_NAME}
@@ -78,7 +96,6 @@ def health():
         info["redis"] = {"url": REDIS_URL, "status": "down", "error": str(e)}
         info["ok"] = False
     return info
-
 
 @app.get("/files")
 def list_files():
@@ -110,21 +127,23 @@ def list_files():
     files.sort(key=lambda f: f["mtime"], reverse=True)
     return {"output_dir": str(OUTPUT_DIR), "count": len(files), "files": files}
 
-
-
+# --- Legado/compat: devolvem o artefato mais recente do tipo ---
 @app.get("/precos")
 def get_precos():
-    return _read_json(OUTPUT_DIR / "precos.json")
+    p = _latest_by_prefix("precos")
+    if not p:
+        raise HTTPException(404, detail="Nenhum arquivo de preços encontrado.")
+    return _read_json(p)
 
 @app.get("/estrutura")
 def get_estrutura():
-    return _read_json(OUTPUT_DIR / "estrutura.json")
-
+    p = _latest_by_prefix("estrutura")
+    if not p:
+        raise HTTPException(404, detail="Nenhum arquivo de estrutura encontrado.")
+    return _read_json(p)
 
 # ---------------------------------------------------------------------
 # JOBS (via Redis/RQ)
-#   - API APENAS enfileira por string ("src.tasks.func"),
-#     o código roda no container do worker.
 # ---------------------------------------------------------------------
 @app.post("/jobs")
 def create_job(payload: Dict[str, Any] = Body(...)):
@@ -132,46 +151,45 @@ def create_job(payload: Dict[str, Any] = Body(...)):
     Cria um job (RQ) para o worker processar e gerar JSONs em `out_dir`.
 
     Operações suportadas:
-    - "precos_auto"
-    - "estrutura_auto"
+      - "precos_auto"
+      - "estrutura_auto"
 
-    Caminhos:
-    - Você pode enviar caminhos **relativos** (recomendado), como "data/..." e "output".
-    - Caminhos relativos são resolvidos **dentro do container do worker** (raiz = /app).
-    - Caminhos absolutos ("/app/...") também funcionam.
+    Observações:
+      - Caminhos podem ser relativos ao /app do worker (ex.: "data/...", "output")
+        ou absolutos ("/app/...").
+      - Para PREÇOS e ESTRUTURA, **SINAPI, SUDECAP e SECID são obrigatórios**.
 
-    Exemplos de payload:
+    Exemplos:
 
     # PREÇOS (automático)
     {
-    "op": "precos_auto",
-    "orc": "data/orcamento.xlsx",
-    "sudecap": "data/sudecap_preco.xls",
-    "sinapi": "data/sinapi_ccd.xlsx",
-    "tol_rel": 0.05,
-    "comparar_desc": true,   // opcional (default = true)
-    "out_dir": "output"      // gera "output/precos.json"
+      "op": "precos_auto",
+      "orc": "data/orcamento.xlsx",
+      "sudecap": "data/sudecap_preco.xls",
+      "sinapi": "data/sinapi_ccd.xlsx",
+      "secid": "data/secid.xlsx",
+      "tol_rel": 0.05,
+      "comparar_desc": true,
+      "out_dir": "output"
     }
 
     # ESTRUTURA (automático)
     {
-    "op": "estrutura_auto",
-    "orc": "data/orcamento.xlsx",
-    "sudecap": "data/sudecap_comp.xls",
-    "sinapi": "data/sinapi_estrutura.xlsx",
-    "out_dir": "output"      // gera "output/estrutura.json"
+      "op": "estrutura_auto",
+      "orc": "data/orcamento.xlsx",
+      "sudecap": "data/sudecap_comp.xls",
+      "sinapi": "data/sinapi_estrutura.xlsx",
+      "secid": "data/secid.xlsx",
+      "out_dir": "output"
     }
 
-    Resposta:
-    - 201/200: { "id": "<job_id>", "status": "queued" }
-    - Consulte o status em /jobs/{id} e o resultado em /jobs/{id}/result
+    Resposta: { "id": "<job_id>", "status": "queued" }
     """
-
     op = (payload.get("op") or "").strip().lower()
     q = _queue()
 
     if op == "precos_auto":
-        for k in ("orc", "sudecap", "sinapi"):
+        for k in ("orc", "sudecap", "sinapi", "secid"):   # << SECID obrigatório
             if not payload.get(k):
                 raise HTTPException(400, detail=f"Campo obrigatório ausente: {k}")
 
@@ -179,11 +197,11 @@ def create_job(payload: Dict[str, Any] = Body(...)):
             orc=payload["orc"],
             sudecap=payload["sudecap"],
             sinapi=payload["sinapi"],
+            secid=payload["secid"],
             tol_rel=float(payload.get("tol_rel", 0.05)),
             out_dir=payload.get("out_dir", str(OUTPUT_DIR)),
+            comparar_desc=bool(payload.get("comparar_desc", True)),
         )
-        if "comparar_desc" in payload:
-            kwargs["comparar_desc"] = bool(payload["comparar_desc"])
 
         job = q.enqueue(
             "src.tasks.run_precos_auto",
@@ -199,7 +217,7 @@ def create_job(payload: Dict[str, Any] = Body(...)):
         )
 
     elif op == "estrutura_auto":
-        for k in ("orc", "sudecap", "sinapi"):
+        for k in ("orc", "sudecap", "sinapi", "secid"):   # << SECID obrigatório
             if not payload.get(k):
                 raise HTTPException(400, detail=f"Campo obrigatório ausente: {k}")
 
@@ -207,8 +225,10 @@ def create_job(payload: Dict[str, Any] = Body(...)):
             orc=payload["orc"],
             sudecap=payload["sudecap"],
             sinapi=payload["sinapi"],
+            secid=payload["secid"],
             out_dir=payload.get("out_dir", str(OUTPUT_DIR)),
         )
+
         job = q.enqueue(
             "src.tasks.run_estrutura_auto",
             kwargs=kwargs,
@@ -225,7 +245,6 @@ def create_job(payload: Dict[str, Any] = Body(...)):
     else:
         raise HTTPException(400, detail="op inválida. Use: precos_auto ou estrutura_auto")
 
-
 @app.get("/jobs/{job_id}")
 def get_job(job_id: str):
     q = _queue()
@@ -234,7 +253,6 @@ def get_job(job_id: str):
     except Exception:
         raise HTTPException(404, detail="Job não encontrado")
     return {"id": job.id, "status": job.get_status()}
-
 
 @app.get("/jobs/{job_id}/result")
 def get_job_result(job_id: str):
@@ -256,6 +274,7 @@ def get_job_result(job_id: str):
     if not artifact_path.is_absolute():
         artifact_path = (APP_ROOT / artifact_path).resolve()
 
+    # segurança: restringe leitura ao OUTPUT_DIR
     try:
         artifact_path.resolve().relative_to(OUTPUT_DIR.resolve())
     except Exception:

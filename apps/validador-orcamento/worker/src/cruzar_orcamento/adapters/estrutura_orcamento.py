@@ -1,4 +1,4 @@
-# src/cruzar_orcamento/adapters/estrutura_orcamento.py
+# apps/validador-orcamento/worker/src/cruzar_orcamento/adapters/estrutura_orcamento.py
 from __future__ import annotations
 
 import logging
@@ -26,7 +26,7 @@ def _looks_like_composicoes(name: str) -> bool:
     n = _norm(name)
     return "compos" in n  # "Composições", "Composicoes", etc.
 
-def _find_header_row(df_raw: pd.DataFrame, max_scan: int = 20) -> int | None:
+def _find_header_row(df_raw: pd.DataFrame, max_scan: int = 50) -> int | None:
     """Tenta localizar a linha de cabeçalho pela presença de 'código' e 'descrição'."""
     for i in range(min(max_scan, len(df_raw))):
         row = df_raw.iloc[i].astype(str).map(_norm)
@@ -42,7 +42,11 @@ _COL_CANDIDATES = {
     "codigo":    ("codigo", "código", "cod.", "cod"),
     "descricao": ("descricao", "descrição", "descr"),
     "tipo":      ("tipo",),  # pode não ser exatamente 'Tipo'; vamos detectar
-    "banco":     ("banco", "base", "fonte"),  # coluna opcional para filtro por banco
+    "banco":     (
+        "banco", "base", "fonte",
+        "referencia", "referência",
+        "base de referencia", "base de referência",
+    ),  # coluna opcional para filtro por banco
 }
 
 def _build_lookup(columns: Iterable[str]) -> dict[str, str]:
@@ -93,7 +97,7 @@ def load_estrutura_orcamento(
     Se `banco` for informado, mantém apenas PAIS cuja linha (de 'Composição') tenha a coluna BANCO/Base/Fonte
     igual ao banco desejado (case-insensitive). Se a coluna de banco não existir, o filtro é ignorado nessa aba.
 
-    Retorna um EstruturaDict: {codigo_pai: {codigo, descricao, filhos[], fonte="ORCAMENTO"}}
+    Retorna um EstruturaDict: {codigo_pai: {codigo, descricao, unidade, filhos[], fonte="ORCAMENTO", banco?}}
     """
     xls = pd.ExcelFile(path)
 
@@ -185,16 +189,24 @@ def load_estrutura_orcamento(
                 if alvo_banco_norm and ("BANCO" in proj.columns):
                     row_banco_norm = _norm(row.get("BANCO", ""))
                     if row_banco_norm != alvo_banco_norm:
-                        # ignorar este pai (fora do banco alvo)
                         current_pai = None
                         continue
 
-                # inicia novo pai
+                # banco original (se existir)
+                banco_val = None
+                if "BANCO" in proj.columns:
+                    bv = row.get("BANCO")
+                    if pd.notna(bv):
+                        banco_val = str(bv).strip() or None
+
+                # inicia novo pai (inclui 'unidade=None' e 'banco' para padronizar shape)
                 current_pai = CompEstrutura(
                     codigo=str(codigo) if pd.notna(codigo) else "",
                     descricao=str(desc) if pd.notna(desc) else "",
+                    unidade=None,
                     filhos=[],          # preencheremos a seguir
                     fonte="ORCAMENTO",
+                    banco=banco_val,
                 )
                 pais_detectados += 1
                 continue

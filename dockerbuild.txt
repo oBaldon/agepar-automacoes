@@ -1,7 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
 # =========[ 0) Vars ]=========
 ROOT="$PWD"
 DATA="$ROOT/apps/validador-orcamento/worker/data"
 OUT="$ROOT/apps/validador-orcamento/worker/output"
+API="http://localhost:8001"
 
 # =========[ 1) Network ]=========
 docker network ls | grep -q 'agepar-automacoes_default' || \
@@ -24,6 +28,7 @@ docker run -d --name validador-worker --restart unless-stopped \
   -e QUEUE_NAME="validador" \
   -v "$DATA:/app/data:ro" \
   -v "$OUT:/app/output" \
+  -u $(id -u):$(id -g) \
   agepar/validador-worker:dev
 
 # =========[ 4) API ]=========
@@ -40,28 +45,48 @@ docker run -d --name validador-api --restart unless-stopped \
   agepar/validador-api:dev
 
 # =========[ 5) Health ]=========
-curl -s http://localhost:8001/health | jq .
-docker exec -it validador-api getent hosts redis
+curl -s "$API/health" | jq .
+docker exec -it validador-api getent hosts redis || true
 
 # =========[ 6) Fluxo JOBS ]=========
-# Criar job (caminhos do worker)
+
+# ---- PREÇOS ----
 JOB_ID=$(
-curl -s http://localhost:8001/jobs \
+curl -s "$API/jobs" \
   -H 'content-type: application/json' \
-  -d '{
-    "op": "precos_auto",
-    "orc": "data/orcamento.xlsx",
-    "sudecap": "data/sudecap_preco.xls",
-    "sinapi": "data/sinapi_ccd.xlsx",
-    "tol_rel": 0.05,
-    "comparar_desc": true,
-    "out_dir": "output"
-  }' | jq -r .id
+  -d "{
+    \"op\": \"precos_auto\",
+    \"orc\": \"data/orcamento2.xlsx\",
+    \"sudecap\": \"data/sudecap_preco.xls\",
+    \"sinapi\": \"data/sinapi_ccd.xlsx\",
+    \"secid\": \"data/secid.xlsx\",
+    \"tol_rel\": 0,
+    \"comparar_desc\": true,
+    \"out_dir\": \"output\"
+  }" | jq -r .id
 )
-echo "Job: $JOB_ID"
+echo "Job (preços): $JOB_ID"
 
 # Status
-curl -s "http://localhost:8001/jobs/$JOB_ID" | jq .
+curl -s "$API/jobs/$JOB_ID" | jq .
 
-# Resultado
-curl -s "http://localhost:8001/jobs/$JOB_ID}/result" | jq .
+# Resultado (corrigido: remove '}' extra)
+curl -s "$API/jobs/$JOB_ID/result" | jq .
+
+# ---- ESTRUTURA (opcional) ----
+JOB2_ID=$(
+curl -s "$API/jobs" \
+  -H 'content-type: application/json' \
+  -d "{
+    \"op\": \"estrutura_auto\",
+    \"orc\": \"data/orcamento2.xlsx\",
+    \"sudecap\": \"data/sudecap_comp.xls\",
+    \"sinapi\": \"data/sinapi_ccd.xlsx\",
+    \"secid\": \"data/secid.xlsx\",
+    \"out_dir\": \"output\"
+  }" | jq -r .id
+)
+echo "Job (estrutura): $JOB2_ID"
+
+curl -s "$API/jobs/$JOB2_ID" | jq .
+curl -s "$API/jobs/$JOB2_ID/result" | jq .

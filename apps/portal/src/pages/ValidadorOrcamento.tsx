@@ -31,6 +31,11 @@ const LINKS_UTEIS: Array<{ label: string; url?: string; hint?: string }> = [
     hint: "Defina VITE_API_SUDECAP_COMPOSICAO no .env",
   },
   {
+    label: "SECID – custos de edificações",
+    url: import.meta.env.VITE_LINK_SECID as string | undefined,
+    hint: "Defina VITE_LINK_SECID no .env",
+  },
+  {
     label: "CPOS/CDHU – catálogo",
     url: import.meta.env.VITE_LINK_CPOS as string | undefined,
     hint: "Defina VITE_LINK_CPOS no .env",
@@ -60,10 +65,12 @@ export default function ValidadorOrcamentoPage() {
   // PREÇOS
   const [sudecap, setSudecap] = useState("data/sudecap_preco.xls");
   const [sinapi, setSinapi] = useState("data/sinapi_ccd.xlsx");
+  const [secid, setSecid] = useState("data/secid.xlsx"); // <<< NOVO (preços)
 
   // ESTRUTURA
   const [sudecapEstr, setSudecapEstr] = useState("data/sudecap_comp.xls");
   const [sinapiEstr, setSinapiEstr] = useState("data/sinapi_ccd.xlsx");
+  const [secidEstr, setSecidEstr] = useState("data/secid.xlsx"); // <<< NOVO (estrutura)
 
   // comuns
   const [outDir, setOutDir] = useState("output");
@@ -90,29 +97,35 @@ export default function ValidadorOrcamentoPage() {
       let jobPayload: PrecosAutoPayload | EstruturaAutoPayload;
 
       if (op === "precos_auto") {
-        if (!sudecap || !sinapi) throw new Error("Preencha SUDECAP e SINAPI (preços).");
+        if (!sudecap || !sinapi || !secid) {
+          throw new Error("Preencha SUDECAP, SINAPI e SECID (preços).");
+        }
         jobPayload = {
           op,
           orc: orc.trim(),
           sudecap: sudecap.trim(),
           sinapi: sinapi.trim(),
+          secid: secid.trim(), // <<< NOVO
           out_dir: outDir.trim(),
           tol_rel: Math.max(0, Number.isFinite(tolRel) ? tolRel : 0.05),
           comparar_desc: compararDesc,
         };
       } else {
-        if (!sudecapEstr || !sinapiEstr) throw new Error("Preencha SUDECAP e SINAPI (estrutura).");
+        if (!sudecapEstr || !sinapiEstr || !secidEstr) {
+          throw new Error("Preencha SUDECAP, SINAPI e SECID (estrutura).");
+        }
         jobPayload = {
           op,
           orc: orc.trim(),
           sudecap: sudecapEstr.trim(),
           sinapi: sinapiEstr.trim(),
+          secid: secidEstr.trim(), // <<< NOVO
           out_dir: outDir.trim(),
         };
       }
 
       const job: Job = await createJob(jobPayload as any);
-      pushRecent(job.id); // registra localmente
+      pushRecent(job.id);
       nav(`/jobs/${job.id}`);
     } catch (e: any) {
       setErr(e?.message ?? "Falha ao criar job.");
@@ -177,6 +190,15 @@ export default function ValidadorOrcamentoPage() {
               </label>
             </div>
 
+            <label className="field">
+              <span className="label">SECID (preços)</span>
+              <input
+                value={secid}
+                onChange={(e) => setSecid(e.target.value)}
+                placeholder="data/secid.xlsx"
+              />
+            </label>
+
             <div className="grid md:grid-cols-2 gap-4">
               <label className="field">
                 <span className="label">Tolerância relativa</span>
@@ -220,6 +242,15 @@ export default function ValidadorOrcamentoPage() {
                 />
               </label>
             </div>
+
+            <label className="field">
+              <span className="label">SECID (estrutura)</span>
+              <input
+                value={secidEstr}
+                onChange={(e) => setSecidEstr(e.target.value)}
+                placeholder="data/secid.xlsx"
+              />
+            </label>
           </>
         )}
 

@@ -1,6 +1,4 @@
-# src/cruzar_orcamento/utils/utils_code.py
 from __future__ import annotations
-
 import re
 
 def norm_code_canonical(x: object) -> str:
@@ -15,7 +13,7 @@ def norm_code_canonical(x: object) -> str:
       "37370.0"         -> "37370"
       "00037370"        -> "37370"
       "01.02.003"       -> "1.2.3"
-      "B.01.000.010116" -> "B.1.0.10116"   (somente segmentos totalmente numéricos perdem zeros à esquerda)
+      "B.01.000.010116" -> "B.1.0.10116"   (somente segmentos numéricos perdem zeros à esquerda)
       88316.0           -> "88316"
       "nan"             -> ""
     """
@@ -26,13 +24,13 @@ def norm_code_canonical(x: object) -> str:
     if s == "" or s.lower() in ("nan", "none"):
         return ""
 
-    # Caso 1: número inteiro possivelmente com ".0", ".00", etc. (tudo dígito + .0+)
+    # Caso 1: dígitos com possível sufixo .0, .00 etc.
     m = re.fullmatch(r"(\d+)(?:\.0+)?", s)
     if m:
         num = m.group(1)
         return num.lstrip("0") or "0"
 
-    # Caso 2: código segmentado por pontos (ex.: "01.02.003" | "B.01.000.010116")
+    # Caso 2: código segmentado por pontos
     if "." in s:
         parts = s.split(".")
         norm_parts = []
@@ -41,15 +39,14 @@ def norm_code_canonical(x: object) -> str:
             if p.isdigit():
                 norm_parts.append(p.lstrip("0") or "0")
             else:
-                # Segmento não-estritamente numérico: mantém como está
                 norm_parts.append(p)
         return ".".join(norm_parts)
 
-    # Caso 3: apenas dígitos (com possíveis zeros à esquerda)
+    # Caso 3: apenas dígitos
     if s.isdigit():
         return s.lstrip("0") or "0"
 
-    # Caso 4: string numérica genérica que vira float, mas sem padrão .0 (ex.: "88316.000")
+    # Caso 4: numérico genérico (ex.: "88316.000")
     try:
         f = float(s)
         if f.is_integer():
@@ -57,5 +54,5 @@ def norm_code_canonical(x: object) -> str:
     except Exception:
         pass
 
-    # Fallback: retorna a string original
+    # Fallback
     return s

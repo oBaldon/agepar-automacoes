@@ -1,20 +1,17 @@
 from __future__ import annotations
-
 import re
 import unicodedata
 import pandas as pd
 
-
 def strip_accents(s: str) -> str:
     return unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode()
-
 
 def norm_text(s: str | float | int | None) -> str:
     """
     Normaliza texto para comparações:
     - converte para string
     - remove acentos
-    - lower/casefold
+    - casefold
     - remove pontuação/ruído
     - colapsa múltiplos espaços
     """
@@ -25,11 +22,10 @@ def norm_text(s: str | float | int | None) -> str:
     s = re.sub(r"\s+", " ", s).strip()
     return s
 
-
 def norm_code(s: str | float | int | None) -> str:
     """
-    Normaliza código (chave de cruzamento):
-    - string + strip; NÃO remove zeros à esquerda (importante!)
+    Normaliza código **de entrada do orçamento** (chave de cruzamento por ocorrência):
+    - string + strip; NÃO remove zeros à esquerda
     - se vier NaN/None, retorna string vazia
     """
     if not isinstance(s, str):

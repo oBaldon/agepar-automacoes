@@ -75,11 +75,6 @@ def load_sudecap(
     """
     xls = pd.ExcelFile(path)
 
-    # Usa a primeira aba por padrão, a menos que o usuário especifique
-    if sheet is None:
-        sheet = 0
-        logger.info(f"Aba detectada para SUDECAP: {sheet!r}")
-
     df_raw = pd.read_excel(path, sheet_name=sheet, header=None)
     header_row = _find_header_row(df_raw)
     if header_row is None:

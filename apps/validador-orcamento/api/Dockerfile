@@ -19,9 +19,11 @@ RUN pip install --upgrade pip && \
 # Código
 COPY src ./src
 
-# Diretórios padrão + usuário não-root
-RUN mkdir -p /app/output /app/data && \
-    adduser --system --no-create-home app && \
+# Diretórios padrão + usuário não-root (cria grupo e usuário explicitamente)
+RUN set -eux; \
+    mkdir -p /app/output /app/data; \
+    groupadd -r app; \
+    useradd -r -g app -d /nonexistent -s /usr/sbin/nologin app; \
     chown -R app:app /app
 
 USER app

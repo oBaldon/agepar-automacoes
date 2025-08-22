@@ -43,6 +43,7 @@ export type PrecosAutoPayload = {
   orc: string;       // ex.: "data/orcamento.xlsx"
   sudecap: string;   // ex.: "data/sudecap_preco.xls"
   sinapi: string;    // ex.: "data/sinapi_ccd.xlsx"
+  secid: string;     // ex.: "data/secid.xlsx"
   tol_rel?: number;  // ex.: 0.05
   comparar_desc?: boolean; // default = true
   out_dir?: string;  // ex.: "output"
@@ -53,6 +54,7 @@ export type EstruturaAutoPayload = {
   orc: string;
   sudecap: string;
   sinapi: string;
+  secid: string;
   out_dir?: string;  // ex.: "output"
 };
 

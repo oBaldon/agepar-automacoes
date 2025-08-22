@@ -1,4 +1,4 @@
-# src/cruzar_orcamento/adapters/orcamento.py
+# apps/validador-orcamento/worker/src/cruzar_orcamento/adapters/orcamento.py
 from __future__ import annotations
 
 import logging
@@ -26,7 +26,7 @@ def _looks_like_composicoes(name: str) -> bool:
     n = _norm(name)
     return "compos" in n  # "Composições", "Composicoes", etc.
 
-def _find_header_row(df_raw: pd.DataFrame, max_scan: int = 20) -> int | None:
+def _find_header_row(df_raw: pd.DataFrame, max_scan: int = 50) -> int | None:
     for i in range(min(max_scan, len(df_raw))):
         row = df_raw.iloc[i].astype(str).map(_norm)
         has_codigo = row.str.contains(r"\bcod(?:igo)?\b", regex=True).any()
@@ -39,10 +39,16 @@ def _find_header_row(df_raw: pd.DataFrame, max_scan: int = 20) -> int | None:
 
 _COL_CANDIDATES = {
     "codigo":    ("codigo", "código", "cod.", "cod"),
-    "banco":     ("banco", "base", "fonte"),  # pode não existir em Composições
+    "banco":     (
+        "banco", "base", "fonte",
+        "referencia", "referência",
+        "base de referencia", "base de referência",
+    ),
     "descricao": ("descricao", "descrição", "descr"),
-    "valor_unit": ("valor unit", "valor unitario", "valor unitário",
-                   "vlr unit", "val unit", "unitario", "valor"),
+    "valor_unit": (
+        "valor unit", "valor unitario", "valor unitário",
+        "vlr unit", "val unit", "unitario", "valor",
+    ),
     "tipo":      ("tipo",),  # pode não ser a coluna real de tipo
 }
 
@@ -85,7 +91,7 @@ def load_orcamento(
     path: str,
     sheets: list[str | int] | None = None,  # se None, tenta "Composições"
     banco: str | None = None,               # se existir coluna
-    valor_scale: float = 1.0,   
+    valor_scale: float = 1.0,
 ) -> CanonDict:
     """
     Lê a(s) aba(s) **Composições** e retorna Dict[codigo, Item] no esquema canônico,
@@ -154,7 +160,6 @@ def load_orcamento(
         proj["CODIGO_ORC"] = proj["CODIGO_ORC"].map(norm_code)
         proj["DESCRICAO_ORC"] = proj["DESCRICAO_ORC"].astype(str).str.strip()
 
-
         # garantir numérico e aplicar escala (ex.: 0.01 se vier 100x)
         proj["VALOR_ORC"] = pd.to_numeric(proj["VALOR_ORC"], errors="coerce")
         if valor_scale != 1.0:
@@ -171,7 +176,7 @@ def load_orcamento(
         raise RuntimeError("Nenhuma aba de 'Composições' válida foi encontrada.")
 
     df_all = pd.concat(frames, ignore_index=True)
-    
+
     # ---- construir Dict[chave_unica, Item] ----
     out: CanonDict = {}
     occ_counter: dict[str, int] = {}
@@ -186,14 +191,17 @@ def load_orcamento(
         # chave única para esta ocorrência (não confundir com o código base)
         key = f"{codigo_base}__occ{occ}"
 
+        # valor_unit: None quando vazio, para o aggregate diferenciar nulo de zero
+        val = row["VALOR_ORC"]
+        valor_unit = float(val) if pd.notna(val) else None
+
         item: Item = {
             "codigo": codigo_base,  # mantém o código 'real' aqui
             "descricao": row["DESCRICAO_ORC"],
-            "valor_unit": float(row["VALOR_ORC"]) if pd.notna(row["VALOR_ORC"]) else 0.0,
+            "valor_unit": valor_unit,
             "fonte": "ORCAMENTO",
+            "banco": str(row["BANCO"]).strip() if "BANCO" in df_all.columns else None,
         }
-        if "BANCO" in df_all.columns:
-            item["banco"] = str(row.get("BANCO", "")).strip()
 
         out[key] = item
 
