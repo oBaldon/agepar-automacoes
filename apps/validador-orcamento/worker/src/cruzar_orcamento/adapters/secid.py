@@ -19,24 +19,57 @@ def _norm_text(x: object) -> str:
 
 
 def _to_float(x: object) -> Optional[float]:
-    """Converte valores para float; retorna None se vazio/NaN/inválido."""
+    """Converte valores para float; retorna None se vazio/NaN/inválido.
+    Regras:
+      - strings vazias -> None
+      - se tiver ponto e vírgula, assume que o ÚLTIMO separador é o decimal
+        (o outro vira separador de milhar e é removido)
+      - só vírgula -> trata como decimal (pt-BR)
+      - só ponto -> trata como decimal (en-US)
+    """
     try:
         if x is None:
             return None
-        # strings vazias ou com vírgula decimal
+
         if isinstance(x, str):
-            s = x.strip().replace(",", ".")
+            s = x.strip()
             if not s:
                 return None
+
+            # negativos entre parênteses: (123,45) -> -123,45
+            if s.startswith("(") and s.endswith(")"):
+                s = "-" + s[1:-1].strip()
+
+            # remover espaços/nbsp de milhar
+            s = s.replace("\u00A0", "").replace(" ", "")
+
+            if "," in s and "." in s:
+                # o último separador é o decimal
+                if s.rfind(",") > s.rfind("."):
+                    # vírgula como decimal -> remove pontos (milhar) e troca vírgula por ponto
+                    s = s.replace(".", "").replace(",", ".")
+                else:
+                    # ponto como decimal -> remove vírgulas (milhar)
+                    s = s.replace(",", "")
+            elif "," in s:
+                # apenas vírgula -> decimal vírgula
+                s = s.replace(".", "")  # guarda-chuva p/ casos "1.234,56"
+                s = s.replace(",", ".")
+            else:
+                # apenas ponto ou nenhum separador -> deixa como está
+                pass
+
             v = float(s)
             if math.isnan(v):
                 return None
             return v
-        # numérico
+
+        # numérico já parseável
         v = float(x)
         if math.isnan(v):
             return None
         return v
+
     except Exception:
         return None
 

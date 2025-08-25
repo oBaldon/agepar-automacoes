@@ -74,15 +74,33 @@ def load_sudecap(
     - Converte vírgula decimal para ponto quando necessário.
     """
     xls = pd.ExcelFile(path)
+    sheet_names = list(xls.sheet_names)
 
-    df_raw = pd.read_excel(path, sheet_name=sheet, header=None)
+    # Escolha robusta de UMA única aba
+    if sheet is None:
+        chosen = sheet_names[0] if sheet_names else 0
+    elif isinstance(sheet, int):
+        chosen = sheet if 0 <= sheet < len(sheet_names) else sheet_names[0]
+    elif isinstance(sheet, str):
+        chosen = sheet if sheet in sheet_names else sheet_names[0]
+    else:
+        chosen = sheet_names[0]
+
+    # 1) Carrega sem header para detectar a linha de cabeçalho
+    df_raw = pd.read_excel(path, sheet_name=chosen, header=None)
+    if isinstance(df_raw, dict):  # segurança extra caso engine retorne dict
+        df_raw = next(iter(df_raw.values()))
+
     header_row = _find_header_row(df_raw)
     if header_row is None:
         # fallback comum: linha 5 (index 4)
         header_row = 4
-        logger.warning(f"[{sheet}] Cabeçalho não detectado; usando header=4 (linha 5).")
+        logger.warning(f"[{chosen!r}] Cabeçalho não detectado; usando header=4 (linha 5).")
 
-    df = pd.read_excel(path, sheet_name=sheet, header=header_row)
+    # 2) Recarrega com header correto
+    df = pd.read_excel(path, sheet_name=chosen, header=header_row)
+    if isinstance(df, dict):  # segurança extra
+        df = next(iter(df.values()))
 
     lookup = _build_lookup(df.columns)
 
@@ -91,7 +109,7 @@ def load_sudecap(
         col_desc     = _pick_col(lookup, _COL_CANDIDATES["descricao"])
         col_val_unit = _pick_col(lookup, _COL_CANDIDATES["valor_unit"])
     except KeyError as e:
-        raise KeyError(f"[{sheet}] {e}. Colunas disponíveis: {list(df.columns)}") from e
+        raise KeyError(f"[{chosen!r}] {e}. Colunas disponíveis: {list(df.columns)}") from e
 
     proj = df[[col_codigo, col_desc, col_val_unit]].copy()
     proj.columns = ["CODIGO_SUDECAP", "DESCRICAO_SUDECAP", "VALOR_SUDECAP"]
