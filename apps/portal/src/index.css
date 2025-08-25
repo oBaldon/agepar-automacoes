@@ -94,3 +94,32 @@ html[data-theme="dark"] textarea::placeholder { color: #6b7280; }
   box-shadow: var(--shadow-md);
 }
 .theme-toggle-alone{ position: fixed; top: 16px; right: 16px; z-index: 9999; }
+
+/* Superfície de dados SEMPRE clara (independe do tema) */
+@layer components {
+  .data-surface {
+    background: #ffffff;
+    color: #111827;          /* texto escuro */
+    border-color: #e5e7eb;   /* gray-200 */
+  }
+  .data-surface .data-table {
+    background: #ffffff;
+    color: #111827;
+  }
+  .data-surface .data-table thead {
+    background: #ffffff;
+  }
+  .data-surface .data-table tbody tr:nth-child(odd) {
+    background: #f9fafb;     /* gray-50 (listras claras) */
+  }
+}
+
+/* Garante que no dark continue claro (override deliberado) */
+html[data-theme="dark"] .data-surface,
+html[data-theme="dark"] .data-surface .data-table,
+html[data-theme="dark"] .data-surface .data-table thead,
+html[data-theme="dark"] .data-surface .data-table tbody tr:nth-child(odd) {
+  background: #ffffff;
+  color: #111827;
+  border-color: #e5e7eb;
+}
