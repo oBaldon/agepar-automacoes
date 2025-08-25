@@ -28,19 +28,40 @@ docker run -d --name validador-worker --restart unless-stopped \
   -e QUEUE_NAME="validador" \
   -v "$DATA:/app/data:ro" \
   -v "$OUT:/app/output" \
-  -u $(id -u):$(id -g) \
+  -u "$(id -u)":"$(id -g)" \
   agepar/validador-worker:dev
 
 # =========[ 4) API ]=========
 cd "$ROOT/apps/validador-orcamento/api"
 docker build -t agepar/validador-api:dev .
 docker rm -f validador-api 2>/dev/null || true
+
+# --- monta CORS_ORIGINS dinamicamente (IPs locais + localhost) ---
+IPS="$(ip -4 -o addr show scope global 2>/dev/null \
+  | awk '{split($4,a,"/"); ip=a[1];
+          if (ip ~ /^10\./ || ip ~ /^192\.168\./ || ip ~ /^172\.(1[6-9]|2[0-9]|3[0-1])\./) print ip }')"
+
+# fallback se o comando acima não retornar nada
+if [ -z "${IPS:-}" ]; then
+  IPS="$(hostname -I 2>/dev/null | tr ' ' '\n' \
+    | awk '($0 ~ /^10\./ || $0 ~ /^192\.168\./ || $0 ~ /^172\.(1[6-9]|2[0-9]|3[0-1])\./){print $0}')"
+fi
+
+ORIGINS=""
+if [ -n "${IPS:-}" ]; then
+  ORIGINS="$(printf 'http://%s:5173,' $IPS)"
+fi
+ORIGINS="${ORIGINS}http://localhost:5173,http://127.0.0.1:5173"
+ORIGINS="${ORIGINS%,}" # remove vírgula final se houver
+
+echo ">> CORS_ORIGINS=${ORIGINS}"
+
 docker run -d --name validador-api --restart unless-stopped \
   --network agepar-automacoes_default \
   -p 8001:8000 \
   -e REDIS_URL="redis://redis:6379/1" \
   -e QUEUE_NAME="validador" \
-  -e CORS_ORIGINS="http://10.59.1.81:5173,http://192.168.18.187:5173,http://localhost:5173" \
+  -e CORS_ORIGINS="$ORIGINS" \
   -v "$OUT:/app/output:ro" \
   agepar/validador-api:dev
 
@@ -70,7 +91,7 @@ echo "Job (preços): $JOB_ID"
 # Status
 curl -s "$API/jobs/$JOB_ID" | jq .
 
-# Resultado (corrigido: remove '}' extra)
+# Resultado
 curl -s "$API/jobs/$JOB_ID/result" | jq .
 
 # ---- ESTRUTURA (opcional) ----
