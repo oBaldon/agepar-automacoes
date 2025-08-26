@@ -3,11 +3,12 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, HTTPException, Body
+from fastapi import FastAPI, HTTPException, Body, UploadFile, File, Form, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -25,6 +26,9 @@ DATA_DIR = Path(os.getenv("DATA_DIR") or (APP_ROOT / "data"))
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/1")
 QUEUE_NAME = os.getenv("QUEUE_NAME", "validador")
+
+# limite opcional para upload (MB)
+MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "200"))
 
 CORS_ORIGINS = (
     [o.strip() for o in os.getenv("CORS_ORIGINS", "*").split(",")]
@@ -63,14 +67,8 @@ def _queue() -> Queue:
     return Queue(name=QUEUE_NAME, connection=conn)
 
 def _latest_by_prefix(prefix: str) -> Optional[Path]:
-    """
-    Retorna o arquivo JSON mais recente em OUTPUT_DIR cujo nome comece com <prefix>.
-    Compatível com nomeações antigas ("precos.json"/"estrutura.json") e novas
-    ("precos_<job>_<ts>.json").
-    """
     if not OUTPUT_DIR.exists():
         return None
-    # 1) procura pelo padrão com timestamp
     cands = sorted(
         OUTPUT_DIR.glob(f"{prefix}_*.json"),
         key=lambda p: p.stat().st_mtime if p.exists() else 0,
@@ -78,16 +76,38 @@ def _latest_by_prefix(prefix: str) -> Optional[Path]:
     )
     if cands:
         return cands[0]
-    # 2) fallback para nome fixo legado
     legacy = OUTPUT_DIR / f"{prefix}.json"
     return legacy if legacy.exists() else None
+
+_SAFE_NAME_RE = re.compile(r"[^A-Za-z0-9._-]+")
+def _safe_filename(name: str) -> str:
+    # remove paths e normaliza
+    name = name.replace("\\", "/").split("/")[-1]
+    name = name.strip()
+    if not name:
+        return "upload.bin"
+    name = _SAFE_NAME_RE.sub("_", name)
+    # evita nomes ocultos vazios
+    return name or "upload.bin"
+
+def _ensure_under(base: Path, p: Path) -> None:
+    try:
+        p.resolve().relative_to(base.resolve())
+    except Exception:
+        raise HTTPException(400, detail="Destino inválido (fora da área permitida).")
 
 # ---------------------------------------------------------------------
 # Rotas simples
 # ---------------------------------------------------------------------
 @app.get("/health")
 def health():
-    info = {"ok": True, "output_dir": str(OUTPUT_DIR), "queue": QUEUE_NAME}
+    info = {
+        "ok": True,
+        "output_dir": str(OUTPUT_DIR),
+        "data_dir": str(DATA_DIR),
+        "queue": QUEUE_NAME,
+        "max_upload_mb": MAX_UPLOAD_MB,
+    }
     try:
         conn = Redis.from_url(REDIS_URL, socket_timeout=2)
         conn.ping()
@@ -143,6 +163,102 @@ def get_estrutura():
     return _read_json(p)
 
 # ---------------------------------------------------------------------
+# UPLOADS para shared/data
+# ---------------------------------------------------------------------
+@app.post("/upload")
+async def upload_file(
+    file: UploadFile = File(...),
+    subdir: Optional[str] = Form(None),      # opcional: ex. "2025-08"
+    overwrite: bool = Form(False),
+):
+    """
+    Recebe um arquivo (multipart/form-data) e salva em DATA_DIR[/subdir]/<nome>.
+    Retorna o caminho relativo para usar nos jobs, ex.: "data/orcamento.xlsx".
+    """
+    if not DATA_DIR.exists():
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    # pasta destino
+    dest_dir = DATA_DIR
+    if subdir:
+        # sanitiza subdir (apenas pastas simples, impede traversal)
+        clean = _SAFE_NAME_RE.sub("_", subdir).strip("._-/")
+        if clean:
+            dest_dir = (DATA_DIR / clean).resolve()
+    _ensure_under(DATA_DIR, dest_dir)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    # nome destino
+    fname = _safe_filename(file.filename or "upload.bin")
+    dest_path = (dest_dir / fname).resolve()
+    _ensure_under(DATA_DIR, dest_path)
+
+    if dest_path.exists() and not overwrite:
+        # gera nome único simples
+        stem = dest_path.stem
+        suffix = dest_path.suffix
+        i = 1
+        while True:
+            alt = dest_path.with_name(f"{stem}({i}){suffix}")
+            if not alt.exists():
+                dest_path = alt
+                break
+            i += 1
+
+    # grava em chunks com limite de tamanho
+    max_bytes = MAX_UPLOAD_MB * 1024 * 1024
+    written = 0
+    with dest_path.open("wb") as out:
+        while True:
+            chunk = await file.read(1024 * 1024)  # 1 MiB
+            if not chunk:
+                break
+            written += len(chunk)
+            if written > max_bytes:
+                try:
+                    dest_path.unlink(missing_ok=True)
+                except Exception:
+                    pass
+                raise HTTPException(413, detail=f"Arquivo excede {MAX_UPLOAD_MB} MB.")
+            out.write(chunk)
+
+    # caminho relativo ao /app para usar na chamada de job
+    rel_for_jobs = str(dest_path.relative_to(APP_ROOT))
+
+    return {
+        "ok": True,
+        "filename": fname,
+        "bytes": written,
+        "saved_at": str(dest_path),
+        "path_for_job": rel_for_jobs,   # ex.: "data/arquivo.xlsx"
+    }
+
+@app.get("/data/list")
+def list_data(subdir: Optional[str] = Query(None, description="Subpasta em /app/data")):
+    """Lista arquivos em /app/data (ou subdir)."""
+    base = DATA_DIR
+    if subdir:
+        clean = _SAFE_NAME_RE.sub("_", subdir).strip("._-/")
+        if clean:
+            base = (DATA_DIR / clean).resolve()
+    _ensure_under(DATA_DIR, base)
+    if not base.exists():
+        return {"dir": str(base), "files": []}
+
+    out: List[Dict[str, Any]] = []
+    for p in sorted(base.glob("*")):
+        if p.is_file():
+            st = p.stat()
+            out.append({
+                "name": p.name,
+                "size": st.st_size,
+                "mtime": st.st_mtime,
+                "mtime_iso": datetime.fromtimestamp(st.st_mtime, tz=timezone.utc).isoformat(),
+                "path_for_job": str(p.relative_to(APP_ROOT)),  # "data/..."
+            })
+    return {"dir": str(base), "files": out}
+
+# ---------------------------------------------------------------------
 # JOBS (via Redis/RQ)
 # ---------------------------------------------------------------------
 @app.post("/jobs")
@@ -158,38 +274,12 @@ def create_job(payload: Dict[str, Any] = Body(...)):
       - Caminhos podem ser relativos ao /app do worker (ex.: "data/...", "output")
         ou absolutos ("/app/...").
       - Para PREÇOS e ESTRUTURA, **SINAPI, SUDECAP e SECID são obrigatórios**.
-
-    Exemplos:
-
-    # PREÇOS (automático)
-    {
-      "op": "precos_auto",
-      "orc": "data/orcamento.xlsx",
-      "sudecap": "data/sudecap_preco.xls",
-      "sinapi": "data/sinapi_ccd.xlsx",
-      "secid": "data/secid.xlsx",
-      "tol_rel": 0.05,
-      "comparar_desc": true,
-      "out_dir": "output"
-    }
-
-    # ESTRUTURA (automático)
-    {
-      "op": "estrutura_auto",
-      "orc": "data/orcamento.xlsx",
-      "sudecap": "data/sudecap_comp.xls",
-      "sinapi": "data/sinapi_estrutura.xlsx",
-      "secid": "data/secid.xlsx",
-      "out_dir": "output"
-    }
-
-    Resposta: { "id": "<job_id>", "status": "queued" }
     """
     op = (payload.get("op") or "").strip().lower()
     q = _queue()
 
     if op == "precos_auto":
-        for k in ("orc", "sudecap", "sinapi", "secid"):   # << SECID obrigatório
+        for k in ("orc", "sudecap", "sinapi", "secid"):
             if not payload.get(k):
                 raise HTTPException(400, detail=f"Campo obrigatório ausente: {k}")
 
@@ -217,7 +307,7 @@ def create_job(payload: Dict[str, Any] = Body(...)):
         )
 
     elif op == "estrutura_auto":
-        for k in ("orc", "sudecap", "sinapi", "secid"):   # << SECID obrigatório
+        for k in ("orc", "sudecap", "sinapi", "secid"):
             if not payload.get(k):
                 raise HTTPException(400, detail=f"Campo obrigatório ausente: {k}")
 
@@ -274,7 +364,6 @@ def get_job_result(job_id: str):
     if not artifact_path.is_absolute():
         artifact_path = (APP_ROOT / artifact_path).resolve()
 
-    # segurança: restringe leitura ao OUTPUT_DIR
     try:
         artifact_path.resolve().relative_to(OUTPUT_DIR.resolve())
     except Exception:
