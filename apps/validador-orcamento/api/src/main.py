@@ -95,6 +95,27 @@ def _ensure_under(base: Path, p: Path) -> None:
         p.resolve().relative_to(base.resolve())
     except Exception:
         raise HTTPException(400, detail="Destino inválido (fora da área permitida).")
+    
+def _resolve_subdir(subdir: Optional[str]) -> Path:
+    """
+    Constrói DATA_DIR/<subdir-sanitizada-preservando-subpastas>.
+    - Divide por / ou \, sanitiza cada segmento.
+    - Impede '..' / traversal.
+    """
+    base = DATA_DIR
+    if not subdir:
+        return base
+    parts = [p for p in subdir.replace("\\", "/").split("/") if p]
+    clean_parts: List[str] = []
+    for part in parts:
+        clean = _SAFE_NAME_RE.sub("_", part).strip("._-")
+        if not clean or clean in {".", ".."}:
+            continue
+        clean_parts.append(clean)
+    dest = (base.joinpath(*clean_parts)).resolve()
+    _ensure_under(base, dest)
+    return dest
+
 
 # ---------------------------------------------------------------------
 # Rotas simples
@@ -179,14 +200,9 @@ async def upload_file(
         DATA_DIR.mkdir(parents=True, exist_ok=True)
 
     # pasta destino
-    dest_dir = DATA_DIR
-    if subdir:
-        # sanitiza subdir (apenas pastas simples, impede traversal)
-        clean = _SAFE_NAME_RE.sub("_", subdir).strip("._-/")
-        if clean:
-            dest_dir = (DATA_DIR / clean).resolve()
-    _ensure_under(DATA_DIR, dest_dir)
+    dest_dir = _resolve_subdir(subdir)
     dest_dir.mkdir(parents=True, exist_ok=True)
+
 
     # nome destino
     fname = _safe_filename(file.filename or "upload.bin")
@@ -225,23 +241,25 @@ async def upload_file(
     # caminho relativo ao /app para usar na chamada de job
     rel_for_jobs = str(dest_path.relative_to(APP_ROOT))
 
-    return {
-        "ok": True,
-        "filename": fname,
-        "bytes": written,
-        "saved_at": str(dest_path),
-        "path_for_job": rel_for_jobs,   # ex.: "data/arquivo.xlsx"
-    }
+    await file.close()  # boa prática: fecha explicitamente o UploadFile
+
+    return JSONResponse(
+        status_code=201,
+        content={
+            "ok": True,
+            "filename": fname,
+            "bytes": written,
+            "saved_at": str(dest_path),
+            "path_for_job": rel_for_jobs,   # ex.: "data/arquivo.xlsx"
+        },
+        headers={"Location": f"/data/list?subdir={dest_dir.relative_to(DATA_DIR)}"},
+    )
 
 @app.get("/data/list")
 def list_data(subdir: Optional[str] = Query(None, description="Subpasta em /app/data")):
     """Lista arquivos em /app/data (ou subdir)."""
-    base = DATA_DIR
-    if subdir:
-        clean = _SAFE_NAME_RE.sub("_", subdir).strip("._-/")
-        if clean:
-            base = (DATA_DIR / clean).resolve()
-    _ensure_under(DATA_DIR, base)
+    base = _resolve_subdir(subdir)
+
     if not base.exists():
         return {"dir": str(base), "files": []}
 

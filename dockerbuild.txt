@@ -43,17 +43,6 @@ docker run -d --name validador-worker --restart unless-stopped \
   agepar/validador-worker:dev
 
 # =========[ 4) API ]=========
-# =========[ 0) Vars ]=========
-ROOT="$PWD"
-
-# shared centralizado
-SHARED_DIR="$ROOT/apps/validador-orcamento/shared"
-SHARED_DATA="$SHARED_DIR/data"
-SHARED_OUT="$SHARED_DIR/output"
-
-API="http://localhost:8001"
-
-# =========[ 4) API ]=========
 cd "$ROOT/apps/validador-orcamento/api"
 docker build -t agepar/validador-api:dev .
 docker rm -f validador-api 2>/dev/null || true
