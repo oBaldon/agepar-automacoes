@@ -1,6 +1,70 @@
+# docker-compose.yml
 version: "3.9"
 
 services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks: [appnet]
+
+  validador-api:
+    build:
+      context: ./apps/validador-orcamento/api
+      dockerfile: Dockerfile
+    # API precisa ESCREVER em /app/data (uploads) e LER /app/output
+    volumes:
+      - ./apps/validador-orcamento/shared/data:/app/data
+      - ./apps/validador-orcamento/shared/output:/app/output:ro
+    environment:
+      - DATA_DIR=/app/data
+      - OUTPUT_DIR=/app/output
+      - REDIS_URL=redis://redis:6379/1
+      - QUEUE_NAME=validador
+      # ajuste conforme seu ambiente; pode sobrescrever via .env
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+    ports:
+      - "8001:8000"
+    depends_on:
+      - redis
+    networks: [appnet]
+    # garante que o container tenha o mesmo UID/GID do host (evita 13 Permission denied)
+    user: "${UID:-1000}:${GID:-1000}"
+
+  validador-worker:
+    build:
+      context: ./apps/validador-orcamento/worker
+      dockerfile: Dockerfile
+    # Worker LÊ /app/data e ESCREVE /app/output
+    volumes:
+      - ./apps/validador-orcamento/shared/data:/app/data:ro
+      - ./apps/validador-orcamento/shared/output:/app/output
+    environment:
+      - REDIS_URL=redis://redis:6379/1
+      - QUEUE_NAME=validador
+    depends_on:
+      - redis
+    networks: [appnet]
+    user: "${UID:-1000}:${GID:-1000}"
+    # se seu Dockerfile já tem ENTRYPOINT "python -m src.runner", não precisa definir command
+
+  portal:
+    build:
+      context: ./apps/portal
+      dockerfile: Dockerfile
+      args:
+        # se o frontend lê VITE_API_BASE_URL em build-time:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://gateway/api}
+    # se seu portal roda dev server na porta 3000
+    expose:
+      - "3000"
+    environment:
+      # algumas imagens de front leem também em runtime; manter por compat
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://gateway/api}
+    depends_on:
+      - validador-api
+    networks: [appnet]
+
   gateway:
     image: nginx:1.27-alpine
     volumes:
@@ -11,40 +75,6 @@ services:
       - portal
       - validador-api
     networks: [appnet]
-
-  portal:
-    build:
-      context: ./apps/portal
-      dockerfile: Dockerfile
-    expose:
-      - "3000"
-    environment:
-      - API_URL=http://gateway/api   # se o front usa esta var
-    networks: [appnet]
-
-  validador-api:
-    build:
-      context: ./apps/validador-orcamento/api
-      dockerfile: Dockerfile
-    expose:
-      - "8000"
-    volumes:
-      - ./apps/validador-orcamento/worker/output:/app/output:ro  # API só lê
-    environment:
-      - OUTPUT_DIR=/app/output
-    networks: [appnet]
-
-  validador-worker:
-    build:
-      context: ./apps/validador-orcamento/worker
-      dockerfile: Dockerfile
-    entrypoint: ["python","-m","src.cli"]
-    command: ["--help"]   # não roda nada por padrão
-    volumes:
-      - ./apps/validador-orcamento/worker/data:/app/data:ro
-      - ./apps/validador-orcamento/worker/output:/app/output
-    networks: [appnet]
-    profiles: ["worker"]  # só sobe quando você pedir
 
 networks:
   appnet:
