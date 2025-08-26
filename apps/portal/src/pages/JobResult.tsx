@@ -19,7 +19,6 @@ function flattenRow(input: any, prefix = ""): Row {
   for (const [k, v] of Object.entries(input)) {
     const key = pre + k;
     if (Array.isArray(v)) {
-      // junta arrays simples; se for array de objetos, serializa curto
       if (v.every((x) => !isObject(x))) {
         out[key] = v.join(", ");
       } else {
@@ -34,32 +33,55 @@ function flattenRow(input: any, prefix = ""): Row {
   return out;
 }
 
-function autoDatasets(data: any): { name: string; rows: Row[] }[] {
-  if (!data) return [];
-  // Caso o backend retorne um array na raiz
-  if (Array.isArray(data) && data.length && isObject(data[0])) {
-    return [{ name: "resultado", rows: data.map((r) => flattenRow(r)) }];
+// Nova detecção genérica de datasets (serve para PREÇOS e ESTRUTURA)
+function findDatasets(
+  root: any,
+  { maxDepth = 3 }: { maxDepth?: number } = {}
+): { name: string; rows: Row[] }[] {
+  const ignore = new Set(["meta", "params", "inputs", "resumo"]);
+  const out: { name: string; rows: Row[] }[] = [];
+
+  // caso mais simples: array de objetos na raiz
+  if (Array.isArray(root) && root.length && isObject(root[0])) {
+    return [{ name: "resultado", rows: root.map((r) => flattenRow(r)) }];
   }
-  // Caso padrão: procurar chaves com arrays de objetos
-  if (isObject(data)) {
-    const out: { name: string; rows: Row[] }[] = [];
-    for (const [key, val] of Object.entries(data)) {
-      if (Array.isArray(val) && val.length && isObject(val[0])) {
-        out.push({ name: key, rows: val.map((r) => flattenRow(r)) });
+
+  function walk(node: any, path: string, depth: number) {
+    if (Array.isArray(node) && node.length && isObject(node[0])) {
+      const name = path || "resultado";
+      out.push({ name, rows: node.map((r) => flattenRow(r)) });
+      return;
+    }
+    if (isObject(node) && depth < maxDepth) {
+      for (const [k, v] of Object.entries(node)) {
+        if (ignore.has(k)) continue;
+        const p = path ? `${path}.${k}` : k;
+        walk(v, p, depth + 1);
       }
     }
-    return out;
   }
-  return [];
+
+  if (isObject(root)) walk(root, "", 0);
+
+  // Se nada foi detectado, mas existe 'data' com algo
+  if (!out.length && isObject(root) && root.data && Array.isArray(root.data) && root.data.length && isObject(root.data[0])) {
+    out.push({ name: "data", rows: root.data.map((r: any) => flattenRow(r)) });
+  }
+
+  // Ordena: maiores primeiro, depois por nome
+  out.sort((a, b) => (b.rows.length - a.rows.length) || a.name.localeCompare(b.name));
+  return out;
 }
 
 function collectColumns(rows: Row[]): string[] {
   const set = new Set<string>();
   for (const r of rows) for (const k of Object.keys(r)) set.add(k);
-  // Colunas “mais comuns” primeiro, se existirem
+  // Campos comuns priorizados
   const preferred = [
     "codigo",
     "codigo_base",
+    "descricao",
+    "fonte",
     "a_banco",
     "a_desc",
     "a_valor",
@@ -67,13 +89,15 @@ function collectColumns(rows: Row[]): string[] {
     "sinapi.ok",
     "sudecap.valor",
     "sudecap.ok",
+    "secid.valor",
+    "secid.ok",
     "dif_abs",
     "dif_rel",
     "dir",
     "motivos",
   ];
   const rest = [...set].filter((c) => !preferred.includes(c));
-  return [...preferred.filter((c) => set.has(c)), ...rest].slice(0, 80);
+  return [...preferred.filter((c) => set.has(c)), ...rest].slice(0, 120);
 }
 
 function formatCell(col: string, val: any) {
@@ -107,7 +131,7 @@ export default function JobResult() {
   const pretty = useMemo(() => (data ? JSON.stringify(data, null, 2) : ""), [data]);
 
   // UI state
-  const datasets = useMemo(() => autoDatasets(data), [data]);
+  const datasets = useMemo(() => findDatasets(data), [data]);
   const [activeTab, setActiveTab] = useState(0);
   const [query, setQuery] = useState("");
   const [sortCol, setSortCol] = useState<string | null>(null);
@@ -157,11 +181,9 @@ export default function JobResult() {
   async function copyJson() {
     try {
       const text = pretty;
-      // Caminho "bonito" quando em contexto seguro
       if (navigator.clipboard && window.isSecureContext) {
         await navigator.clipboard.writeText(text);
       } else {
-        // Fallback compatível com HTTP/intranet
         const ta = document.createElement("textarea");
         ta.value = text;
         ta.style.position = "fixed";
@@ -180,7 +202,6 @@ export default function JobResult() {
       setErr("Não foi possível copiar. Use o botão Baixar JSON.");
     }
   }
-
 
   function downloadJson() {
     const blob = new Blob([pretty], { type: "application/json;charset=utf-8" });
@@ -228,7 +249,7 @@ export default function JobResult() {
           if (!stop) {
             setData(r);
             setLoading(false);
-            pushRecent(id); // re-registra pra subir pro topo
+            pushRecent(id);
           }
           return;
         }
@@ -285,13 +306,13 @@ export default function JobResult() {
         </div>
       )}
 
-      {/* Abas dos datasets detectados */}
+      {/* Abas dos datasets detectados (genérico p/ preços e estrutura) */}
       {!!datasets.length && (
         <div className="card text-left">
           <div className="mb-3 flex flex-wrap items-center gap-2">
             {datasets.map((d, i) => (
               <button
-                key={d.name}
+                key={`${d.name}-${i}`}
                 className={`btn-ghost small ${i === activeTab ? "border border-neutral-400" : ""}`}
                 onClick={() => setActiveTab(i)}
                 title={`Ver ${d.name}`}
@@ -395,7 +416,6 @@ export default function JobResult() {
             <button className="btn-ghost small" onClick={copyJson} disabled={!pretty}>
               {copied ? "Copiado ✓" : "Copiar JSON"}
             </button>
-
             <button className="btn-ghost small" onClick={downloadJson} disabled={!pretty}>
               Baixar JSON
             </button>

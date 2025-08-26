@@ -60,6 +60,25 @@ export type EstruturaAutoPayload = {
 
 export type CreateJobPayload = PrecosAutoPayload | EstruturaAutoPayload;
 
+// tipos para upload
+export type UploadResponse = {
+  ok: boolean;
+  filename: string;
+  bytes: number;
+  saved_at: string;
+  path_for_job: string; // "data/..." para passar direto pro job
+};
+
+// (opcional) listar arquivos no /app/data (ou subpasta)
+export type DataListEntry = {
+  name: string;
+  size: number;
+  mtime: number;
+  mtime_iso?: string;
+  path_for_job: string; // "data/..."
+};
+export type DataListResponse = { dir: string; files: DataListEntry[] };
+
 // --------------------
 // Helper de fetch
 // --------------------
@@ -125,6 +144,31 @@ export async function getJob(id: string): Promise<Job> {
 
 export async function getJobResult<T = unknown>(id: string): Promise<T> {
   return request<T>(`/jobs/${encodeURIComponent(id)}/result`);
+}
+
+// ========== UPLOAD ==========
+export async function uploadFile(
+  file: File,
+  subdir?: string,
+  overwrite = false
+): Promise<UploadResponse> {
+  const fd = new FormData();
+  fd.set("file", file);
+  if (subdir) fd.set("subdir", subdir);
+  if (overwrite) fd.set("overwrite", "true");
+
+  const r = await fetch(`${API_BASE_URL}/upload`, { method: "POST", body: fd });
+  if (!r.ok) {
+    const t = await r.text().catch(() => "");
+    throw new Error(`Falha no upload (${r.status}): ${t || r.statusText}`);
+  }
+  return r.json();
+}
+
+// ========== DATA (opcional) ==========
+export async function listData(subdir?: string): Promise<DataListResponse> {
+  const qs = subdir ? `?subdir=${encodeURIComponent(subdir)}` : "";
+  return request<DataListResponse>(`/data/list${qs}`);
 }
 
 // ========== LEGADO (se ainda existir uso no front) ==========

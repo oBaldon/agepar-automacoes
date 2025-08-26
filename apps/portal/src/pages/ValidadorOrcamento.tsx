@@ -5,6 +5,7 @@ import {
   API_BASE_URL,
   health as apiHealth,
   createJob,
+  uploadFile,                // <<< novo
   type Job,
   type PrecosAutoPayload,
   type EstruturaAutoPayload,
@@ -47,6 +48,53 @@ const LINKS_UTEIS: Array<{ label: string; url?: string; hint?: string }> = [
   },
 ];
 
+// --- Mini componente de upload (local ao arquivo) ---
+function UploadField(props: {
+  label: string;
+  value: string;                              // path_for_job atual (ex.: data/uploads/jobX/arquivo.xlsx)
+  onUploaded: (pathForJob: string) => void;   // callback com o path salvo
+  subdir: string;                              // subpasta de upload (ex.: "uploads/job_...") 
+  accept?: string;
+  disabled?: boolean;
+}) {
+  const { label, value, onUploaded, subdir, accept, disabled } = props;
+  const [status, setStatus] = useState<"idle" | "uploading" | "ok" | "error">("idle");
+  const [msg, setMsg] = useState<string | null>(null);
+
+  async function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setStatus("uploading");
+    setMsg(null);
+    try {
+      const resp = await uploadFile(file, subdir);
+      onUploaded(resp.path_for_job); // ex.: "data/uploads/job1/arquivo.xlsx"
+      setStatus("ok");
+      setMsg(`${resp.filename} enviado (${resp.bytes} bytes)`);
+    } catch (err: any) {
+      setStatus("error");
+      setMsg(err?.message ?? "Falha no upload");
+    }
+  }
+
+  return (
+    <label className="field">
+      <span className="label">{label}</span>
+      <div className="flex flex-col gap-2">
+        <input type="file" onChange={handleChange} accept={accept} disabled={disabled} />
+        {value ? (
+          <code className="text-xs break-all">{value}</code>
+        ) : (
+          <span className="text-xs opacity-70">Selecione um arquivo para enviar…</span>
+        )}
+        {status === "uploading" && <span className="text-xs text-blue-600">Enviando…</span>}
+        {status === "ok" && <span className="text-xs text-green-700">{msg}</span>}
+        {status === "error" && <span className="text-xs text-red-600">{msg}</span>}
+      </div>
+    </label>
+  );
+}
+
 export default function ValidadorOrcamentoPage() {
   const nav = useNavigate();
 
@@ -58,19 +106,27 @@ export default function ValidadorOrcamentoPage() {
       .catch(() => setHealth("offline"));
   }, []);
 
-  // operação e campos
+  // operação
   const [op, setOp] = useState<Op>("precos_auto");
-  const [orc, setOrc] = useState("data/orcamento.xlsx");
 
+  // subpasta de upload única por sessão (facilita rastreio)
+  const uploadSubdir = useMemo(() => {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const d = new Date();
+    const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+    return `uploads/job_${stamp}`;
+  }, []);
+
+  // caminhos (path_for_job) retornados pelo upload
+  const [orc, setOrc] = useState<string>(""); // comum
   // PREÇOS
-  const [sudecap, setSudecap] = useState("data/sudecap_preco.xls");
-  const [sinapi, setSinapi] = useState("data/sinapi_ccd.xlsx");
-  const [secid, setSecid] = useState("data/secid.xlsx"); // <<< NOVO (preços)
-
+  const [sudecap, setSudecap] = useState<string>("");
+  const [sinapi, setSinapi] = useState<string>("");
+  const [secid, setSecid] = useState<string>("");
   // ESTRUTURA
-  const [sudecapEstr, setSudecapEstr] = useState("data/sudecap_comp.xls");
-  const [sinapiEstr, setSinapiEstr] = useState("data/sinapi_ccd.xlsx");
-  const [secidEstr, setSecidEstr] = useState("data/secid.xlsx"); // <<< NOVO (estrutura)
+  const [sudecapEstr, setSudecapEstr] = useState<string>("");
+  const [sinapiEstr, setSinapiEstr] = useState<string>("");
+  const [secidEstr, setSecidEstr] = useState<string>("");
 
   // comuns
   const [outDir, setOutDir] = useState("output");
@@ -91,35 +147,35 @@ export default function ValidadorOrcamentoPage() {
     setErr(null);
     try {
       if (!orc || !outDir) {
-        throw new Error("Preencha Orçamento e Pasta de saída.");
+        throw new Error("Envie o arquivo do Orçamento e informe a pasta de saída.");
       }
 
       let jobPayload: PrecosAutoPayload | EstruturaAutoPayload;
 
       if (op === "precos_auto") {
         if (!sudecap || !sinapi || !secid) {
-          throw new Error("Preencha SUDECAP, SINAPI e SECID (preços).");
+          throw new Error("Envie SUDECAP, SINAPI e SECID (preços).");
         }
         jobPayload = {
           op,
           orc: orc.trim(),
           sudecap: sudecap.trim(),
           sinapi: sinapi.trim(),
-          secid: secid.trim(), // <<< NOVO
+          secid: secid.trim(),
           out_dir: outDir.trim(),
           tol_rel: Math.max(0, Number.isFinite(tolRel) ? tolRel : 0.05),
           comparar_desc: compararDesc,
         };
       } else {
         if (!sudecapEstr || !sinapiEstr || !secidEstr) {
-          throw new Error("Preencha SUDECAP, SINAPI e SECID (estrutura).");
+          throw new Error("Envie SUDECAP, SINAPI e SECID (estrutura).");
         }
         jobPayload = {
           op,
           orc: orc.trim(),
           sudecap: sudecapEstr.trim(),
           sinapi: sinapiEstr.trim(),
-          secid: secidEstr.trim(), // <<< NOVO
+          secid: secidEstr.trim(),
           out_dir: outDir.trim(),
         };
       }
@@ -160,44 +216,54 @@ export default function ValidadorOrcamentoPage() {
 
           <label className="field">
             <span className="label">Pasta de saída</span>
-            <input value={outDir} onChange={(e) => setOutDir(e.target.value)} placeholder="output" />
+            <input
+              value={outDir}
+              onChange={(e) => setOutDir(e.target.value)}
+              placeholder="output"
+            />
+            <span className="text-xs opacity-70">Os resultados (JSON) serão salvos nesta pasta no worker.</span>
           </label>
         </div>
 
-        <label className="field">
-          <span className="label">Arquivo do Orçamento (no worker)</span>
-          <input value={orc} onChange={(e) => setOrc(e.target.value)} placeholder="data/orcamento.xlsx" />
-        </label>
+        {/* Upload comum: Orçamento */}
+        <UploadField
+          label="Orçamento (.xlsx)"
+          value={orc}
+          onUploaded={setOrc}
+          subdir={uploadSubdir}
+          accept=".xlsx,.xls"
+          disabled={submitting || health !== "online"}
+        />
 
         {op === "precos_auto" ? (
           <>
             <div className="grid md:grid-cols-2 gap-4">
-              <label className="field">
-                <span className="label">SUDECAP (preços)</span>
-                <input
-                  value={sudecap}
-                  onChange={(e) => setSudecap(e.target.value)}
-                  placeholder="data/sudecap_preco.xls"
-                />
-              </label>
-              <label className="field">
-                <span className="label">SINAPI (preços)</span>
-                <input
-                  value={sinapi}
-                  onChange={(e) => setSinapi(e.target.value)}
-                  placeholder="data/sinapi_ccd.xlsx"
-                />
-              </label>
+              <UploadField
+                label="SUDECAP (preços)"
+                value={sudecap}
+                onUploaded={setSudecap}
+                subdir={uploadSubdir}
+                accept=".xlsx,.xls"
+                disabled={submitting || health !== "online"}
+              />
+              <UploadField
+                label="SINAPI (preços)"
+                value={sinapi}
+                onUploaded={setSinapi}
+                subdir={uploadSubdir}
+                accept=".xlsx,.xls"
+                disabled={submitting || health !== "online"}
+              />
             </div>
 
-            <label className="field">
-              <span className="label">SECID (preços)</span>
-              <input
-                value={secid}
-                onChange={(e) => setSecid(e.target.value)}
-                placeholder="data/secid.xlsx"
-              />
-            </label>
+            <UploadField
+              label="SECID (preços)"
+              value={secid}
+              onUploaded={setSecid}
+              subdir={uploadSubdir}
+              accept=".xlsx,.xls"
+              disabled={submitting || health !== "online"}
+            />
 
             <div className="grid md:grid-cols-2 gap-4">
               <label className="field">
@@ -225,32 +291,32 @@ export default function ValidadorOrcamentoPage() {
         ) : (
           <>
             <div className="grid md:grid-cols-2 gap-4">
-              <label className="field">
-                <span className="label">SUDECAP (estrutura)</span>
-                <input
-                  value={sudecapEstr}
-                  onChange={(e) => setSudecapEstr(e.target.value)}
-                  placeholder="data/sudecap_comp.xls"
-                />
-              </label>
-              <label className="field">
-                <span className="label">SINAPI (estrutura)</span>
-                <input
-                  value={sinapiEstr}
-                  onChange={(e) => setSinapiEstr(e.target.value)}
-                  placeholder="data/sinapi_estrutura.xlsx"
-                />
-              </label>
+              <UploadField
+                label="SUDECAP (estrutura)"
+                value={sudecapEstr}
+                onUploaded={setSudecapEstr}
+                subdir={uploadSubdir}
+                accept=".xlsx,.xls"
+                disabled={submitting || health !== "online"}
+              />
+              <UploadField
+                label="SINAPI (estrutura)"
+                value={sinapiEstr}
+                onUploaded={setSinapiEstr}
+                subdir={uploadSubdir}
+                accept=".xlsx,.xls"
+                disabled={submitting || health !== "online"}
+              />
             </div>
 
-            <label className="field">
-              <span className="label">SECID (estrutura)</span>
-              <input
-                value={secidEstr}
-                onChange={(e) => setSecidEstr(e.target.value)}
-                placeholder="data/secid.xlsx"
-              />
-            </label>
+            <UploadField
+              label="SECID (estrutura)"
+              value={secidEstr}
+              onUploaded={setSecidEstr}
+              subdir={uploadSubdir}
+              accept=".xlsx,.xls"
+              disabled={submitting || health !== "online"}
+            />
           </>
         )}
 
@@ -263,8 +329,8 @@ export default function ValidadorOrcamentoPage() {
         </div>
 
         <p className="text-xs text-[var(--muted)]">
-          Dica: os caminhos são relativos ao <code>/app</code> do container do <b>worker</b>. Exemplos:{" "}
-          <code>data/arquivo.xlsx</code> e <code>output</code>.
+          Os arquivos são enviados para <code>/app/data/{uploadSubdir}</code> (no worker),
+          e os caminhos acima (ex.: <code>data/…</code>) são usados diretamente no job.
         </p>
       </form>
 
@@ -287,7 +353,7 @@ export default function ValidadorOrcamentoPage() {
         </ul>
         <p className="text-xs text-[var(--muted)] mt-2">
           Configure os endereços no arquivo <code>.env</code> do front-end (ex.:{" "}
-          <code>VITE_LINK_SINAPI</code>, <code>VITE_LINK_SUDECAP</code>…).
+          <code>VITE_LINK_SINAPI</code>, <code>VITE_LINK_SUDECAP</code>, <code>VITE_LINK_SECID</code>…).
         </p>
       </section>
     </main>
