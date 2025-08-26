@@ -49,8 +49,7 @@ Thumbs.db
 # -----------------------
 # Projeto: dados gerados
 # -----------------------
-apps/validador-orcamento/worker/data/
-apps/validador-orcamento/worker/output/
+apps/validador-orcamento/shared/
 
 # -----------------------
 # Vite envs locais (não versionar segredos)
