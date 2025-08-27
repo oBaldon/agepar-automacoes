@@ -132,7 +132,7 @@ export default function ValidadorOrcamentoPage() {
   const [outDir, setOutDir] = useState("output");
 
   // apenas PREÇOS
-  const [tolRel, setTolRel] = useState<number>(0.05);
+  const [tolRel, setTolRel] = useState<number>(0.0);
   const [compararDesc, setCompararDesc] = useState<boolean>(true);
 
   // ui state
@@ -146,38 +146,42 @@ export default function ValidadorOrcamentoPage() {
     setSubmitting(true);
     setErr(null);
     try {
-      if (!orc || !outDir) {
+      if (!orc?.trim() || !outDir?.trim()) {
         throw new Error("Envie o arquivo do Orçamento e informe a pasta de saída.");
       }
 
       let jobPayload: PrecosAutoPayload | EstruturaAutoPayload;
 
       if (op === "precos_auto") {
-        if (!sudecap || !sinapi || !secid) {
-          throw new Error("Envie SUDECAP, SINAPI e SECID (preços).");
+        const informados = [sudecap, sinapi, secid].map(s => s?.trim()).filter(Boolean) as string[];
+        if (informados.length === 0) {
+          throw new Error("Envie ao menos um banco (SUDECAP / SINAPI / SECID) para preços.");
         }
-        jobPayload = {
+        const p: any = {
           op,
           orc: orc.trim(),
-          sudecap: sudecap.trim(),
-          sinapi: sinapi.trim(),
-          secid: secid.trim(),
           out_dir: outDir.trim(),
-          tol_rel: Math.max(0, Number.isFinite(tolRel) ? tolRel : 0.05),
+          tol_rel: Math.max(0, Number.isFinite(tolRel) ? tolRel : 0.0),
           comparar_desc: compararDesc,
         };
+        if (sudecap?.trim()) p.sudecap = sudecap.trim();
+        if (sinapi?.trim()) p.sinapi = sinapi.trim();
+        if (secid?.trim()) p.secid = secid.trim();
+        jobPayload = p as PrecosAutoPayload;
       } else {
-        if (!sudecapEstr || !sinapiEstr || !secidEstr) {
-          throw new Error("Envie SUDECAP, SINAPI e SECID (estrutura).");
+        const informados = [sudecapEstr, sinapiEstr, secidEstr].map(s => s?.trim()).filter(Boolean) as string[];
+        if (informados.length === 0) {
+          throw new Error("Envie ao menos um banco (SUDECAP / SINAPI / SECID) para estrutura.");
         }
-        jobPayload = {
+        const p: any = {
           op,
           orc: orc.trim(),
-          sudecap: sudecapEstr.trim(),
-          sinapi: sinapiEstr.trim(),
-          secid: secidEstr.trim(),
           out_dir: outDir.trim(),
         };
+        if (sudecapEstr?.trim()) p.sudecap = sudecapEstr.trim();
+        if (sinapiEstr?.trim()) p.sinapi = sinapiEstr.trim();
+        if (secidEstr?.trim()) p.secid = secidEstr.trim();
+        jobPayload = p as EstruturaAutoPayload;
       }
 
       const job: Job = await createJob(jobPayload as any);
@@ -190,15 +194,15 @@ export default function ValidadorOrcamentoPage() {
     }
   }
 
+
   return (
     <main className="p-6 max-w-5xl mx-auto space-y-6">
       <header className="flex items-center gap-3">
         <h1 className="text-2xl font-semibold">Validador de Orçamento</h1>
         <code className="text-xs opacity-70">{baseShown}</code>
         <span
-          className={`text-sm px-2 py-1 rounded ${
-            health === "online" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
-          }`}
+          className={`text-sm px-2 py-1 rounded ${health === "online" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+            }`}
         >
           {health}
         </span>

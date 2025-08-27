@@ -279,6 +279,7 @@ def list_data(subdir: Optional[str] = Query(None, description="Subpasta em /app/
 # ---------------------------------------------------------------------
 # JOBS (via Redis/RQ)
 # ---------------------------------------------------------------------
+
 @app.post("/jobs")
 def create_job(payload: Dict[str, Any] = Body(...)):
     """
@@ -291,26 +292,43 @@ def create_job(payload: Dict[str, Any] = Body(...)):
     Observações:
       - Caminhos podem ser relativos ao /app do worker (ex.: "data/...", "output")
         ou absolutos ("/app/...").
-      - Para PREÇOS e ESTRUTURA, **SINAPI, SUDECAP e SECID são obrigatórios**.
+      - Agora apenas 'orc' é obrigatório; SINAPI/SUDECAP/SECID são opcionais,
+        mas é necessário informar **ao menos um** deles.
     """
     op = (payload.get("op") or "").strip().lower()
     q = _queue()
 
-    if op == "precos_auto":
-        for k in ("orc", "sudecap", "sinapi", "secid"):
-            if not payload.get(k):
-                raise HTTPException(400, detail=f"Campo obrigatório ausente: {k}")
+    # obrigatório
+    orc = payload.get("orc")
+    if not orc:
+        raise HTTPException(400, detail="Campo obrigatório ausente: orc")
 
+    # bancos opcionais (precisa ter pelo menos 1)
+    sinapi   = payload.get("sinapi") or None
+    sudecap  = payload.get("sudecap") or None
+    secid    = payload.get("secid") or None
+    bancos_informados = [b for b in (sinapi, sudecap, secid) if b]
+    if not bancos_informados:
+        raise HTTPException(400, detail="Informe ao menos um banco: sinapi, sudecap ou secid.")
+
+    # base kwargs comuns
+    base_kwargs = dict(
+        orc=orc,
+        out_dir=payload.get("out_dir", str(OUTPUT_DIR)),
+    )
+    if sinapi:
+        base_kwargs["sinapi"] = sinapi
+    if sudecap:
+        base_kwargs["sudecap"] = sudecap
+    if secid:
+        base_kwargs["secid"] = secid
+
+    if op == "precos_auto":
         kwargs = dict(
-            orc=payload["orc"],
-            sudecap=payload["sudecap"],
-            sinapi=payload["sinapi"],
-            secid=payload["secid"],
-            tol_rel=float(payload.get("tol_rel", 0.05)),
-            out_dir=payload.get("out_dir", str(OUTPUT_DIR)),
+            **base_kwargs,
+            tol_rel=float(payload.get("tol_rel", 0.0)),
             comparar_desc=bool(payload.get("comparar_desc", True)),
         )
-
         job = q.enqueue(
             "src.tasks.run_precos_auto",
             kwargs=kwargs,
@@ -325,18 +343,7 @@ def create_job(payload: Dict[str, Any] = Body(...)):
         )
 
     elif op == "estrutura_auto":
-        for k in ("orc", "sudecap", "sinapi", "secid"):
-            if not payload.get(k):
-                raise HTTPException(400, detail=f"Campo obrigatório ausente: {k}")
-
-        kwargs = dict(
-            orc=payload["orc"],
-            sudecap=payload["sudecap"],
-            sinapi=payload["sinapi"],
-            secid=payload["secid"],
-            out_dir=payload.get("out_dir", str(OUTPUT_DIR)),
-        )
-
+        kwargs = dict(**base_kwargs)
         job = q.enqueue(
             "src.tasks.run_estrutura_auto",
             kwargs=kwargs,
@@ -352,6 +359,7 @@ def create_job(payload: Dict[str, Any] = Body(...)):
 
     else:
         raise HTTPException(400, detail="op inválida. Use: precos_auto ou estrutura_auto")
+
 
 @app.get("/jobs/{job_id}")
 def get_job(job_id: str):

@@ -80,59 +80,65 @@ def _artifact_path(out_dir: Path, kind: str) -> Path:
 # ---------------------------------------------------------------------
 def run_precos_auto(
     orc: str,
-    sudecap: str,
-    sinapi: str,
-    secid: str,                     # ⬅️ agora OBRIGATÓRIO, como os demais
-    tol_rel: float = 0.05,
+    sudecap: Optional[str] = None,
+    sinapi: Optional[str] = None,
+    secid: Optional[str] = None,
+    tol_rel: float = 0.0,
     out_dir: str = "output",
     comparar_desc: bool = True,
 ):
     """
-    Cruza preços do orçamento com SINAPI, SUDECAP e SECID (todos obrigatórios).
-    Gera '<precos>_<job>_<ts>.json' em out_dir.
+    Cruza preços do orçamento com quaisquer bancos informados (SINAPI/SUDECAP/SECID).
+    Requer: 'orc' + ao menos 1 banco. Gera '<precos>_<job>_<ts>.json' em out_dir.
     """
     started_at = _now_iso()
     t0 = perf_counter()
     try:
         tol_rel = float(tol_rel)
     except Exception:
-        tol_rel = 0.05
+        tol_rel = 0.0
     tol_rel = max(0.0, min(1.0, tol_rel))
 
     try:
         orc_p     = _norm_in(orc)
-        sudecap_p = _norm_in(sudecap)
-        sinapi_p  = _norm_in(sinapi)
-        secid_p   = _norm_in(secid)
         out_dir_p = _norm_out_dir(out_dir)
         out_dir_p.mkdir(parents=True, exist_ok=True)
 
         _ensure_exists(orc_p, "Orçamento")
-        _ensure_exists(sudecap_p, "SUDECAP (preços)")
-        _ensure_exists(sinapi_p, "SINAPI (preços)")
-        _ensure_exists(secid_p, "SECID (preços)")
+        a = load_orc_precos(orc_p)
 
-        a     = load_orc_precos(orc_p)
-        b_sud = load_sudecap_precos(sudecap_p)
-        b_sin = load_sinapi_precos(sinapi_p)
-        b_sec = load_secid_precos(secid_p)
+        banks: Dict[str, Dict[str, Any]] = {}
+        meta_inputs: Dict[str, Any] = {"orc": str(orc_p)}
 
-        # Bancos de referência padronizados (todos presentes)
-        banks: Dict[str, Dict[str, Any]] = {"SINAPI": b_sin, "SUDECAP": b_sud, "SECID": b_sec}
+        if sinapi:
+            sinapi_p = _norm_in(sinapi)
+            _ensure_exists(sinapi_p, "SINAPI (preços)")
+            banks["SINAPI"] = load_sinapi_precos(sinapi_p)
+            meta_inputs["sinapi"] = str(sinapi_p)
 
-        # Consolidação SEMPRE via 'multi'
+        if sudecap:
+            sudecap_p = _norm_in(sudecap)
+            _ensure_exists(sudecap_p, "SUDECAP (preços)")
+            banks["SUDECAP"] = load_sudecap_precos(sudecap_p)
+            meta_inputs["sudecap"] = str(sudecap_p)
+
+        if secid:
+            secid_p = _norm_in(secid)
+            _ensure_exists(secid_p, "SECID (preços)")
+            banks["SECID"] = load_secid_precos(secid_p)
+            meta_inputs["secid"] = str(secid_p)
+
+        if not banks:
+            raise ValueError("Informe ao menos um banco: SINAPI, SUDECAP ou SECID.")
+
+        # Consolidação via 'multi'
         payload = consolidar_precos_multi(a, banks, tol_rel=tol_rel, comparar_descricao=comparar_desc)
 
         meta = {
             "kind": "precos",
             "generated_at": _now_iso(),
             "started_at": started_at,
-            "inputs": {
-                "orc": str(orc_p),
-                "sudecap": str(sudecap_p),
-                "sinapi": str(sinapi_p),
-                "secid": str(secid_p),
-            },
+            "inputs": meta_inputs,
             "params": {
                 "tol_rel": tol_rel,
                 "comparar_descricao": comparar_desc,
@@ -170,52 +176,58 @@ def run_precos_auto(
 
 def run_estrutura_auto(
     orc: str,
-    sudecap: str,
-    sinapi: str,
-    secid: str,                     # ⬅️ agora OBRIGATÓRIO, como os demais
+    sudecap: Optional[str] = None,
+    sinapi: Optional[str] = None,
+    secid: Optional[str] = None,
     out_dir: str = "output",
 ):
     """
-    Compara estrutura (pai + filhos 1º nível) do orçamento com SINAPI, SUDECAP e SECID.
-    Gera '<estrutura>_<job>_<ts>.json' em out_dir.
+    Compara estrutura (pai + filhos 1º nível) do orçamento com quaisquer bancos (SINAPI/SUDECAP/SECID).
+    Requer: 'orc' + ao menos 1 banco. Gera '<estrutura>_<job>_<ts>.json' em out_dir.
     """
     started_at = _now_iso()
     t0 = perf_counter()
 
     try:
         orc_p     = _norm_in(orc)
-        sudecap_p = _norm_in(sudecap)
-        sinapi_p  = _norm_in(sinapi)
-        secid_p   = _norm_in(secid)
         out_dir_p = _norm_out_dir(out_dir)
         out_dir_p.mkdir(parents=True, exist_ok=True)
 
         _ensure_exists(orc_p, "Estrutura do Orçamento")
-        _ensure_exists(sudecap_p, "SUDECAP (estrutura)")
-        _ensure_exists(sinapi_p, "SINAPI (estrutura)")
-        _ensure_exists(secid_p, "SECID (estrutura)")
+        a = load_orc_estr(orc_p)
 
-        a     = load_orc_estr(orc_p)
-        b_sud = load_sud_estr(sudecap_p)
-        b_sin = load_sinapi_estr(sinapi_p)
-        b_sec = load_estrutura_secid(secid_p)
+        banks: Dict[str, Dict[str, Any]] = {}
+        meta_inputs: Dict[str, Any] = {"orc": str(orc_p)}
 
-        # Bancos de referência padronizados (todos presentes)
-        banks: Dict[str, Dict[str, Any]] = {"SINAPI": b_sin, "SUDECAP": b_sud, "SECID": b_sec}
+        if sinapi:
+            sinapi_p = _norm_in(sinapi)
+            _ensure_exists(sinapi_p, "SINAPI (estrutura)")
+            banks["SINAPI"] = load_sinapi_estr(sinapi_p)
+            meta_inputs["sinapi"] = str(sinapi_p)
 
-        # Consolidação SEMPRE via 'multi'
+        if sudecap:
+            sudecap_p = _norm_in(sudecap)
+            _ensure_exists(sudecap_p, "SUDECAP (estrutura)")
+            banks["SUDECAP"] = load_sud_estr(sudecap_p)
+            meta_inputs["sudecap"] = str(sudecap_p)
+
+        if secid:
+            secid_p = _norm_in(secid)
+            _ensure_exists(secid_p, "SECID (estrutura)")
+            banks["SECID"] = load_estrutura_secid(secid_p)
+            meta_inputs["secid"] = str(secid_p)
+
+        if not banks:
+            raise ValueError("Informe ao menos um banco: SINAPI, SUDECAP ou SECID.")
+
+        # Consolidação via 'multi'
         payload = consolidar_estrutura_multi(a, banks)
 
         meta = {
             "kind": "estrutura",
             "generated_at": _now_iso(),
             "started_at": started_at,
-            "inputs": {
-                "orc": str(orc_p),
-                "sudecap": str(sudecap_p),
-                "sinapi": str(sinapi_p),
-                "secid": str(secid_p),
-            },
+            "inputs": meta_inputs,
             "params": {"bancos": sorted(banks.keys())},
         }
         if isinstance(payload, dict):
