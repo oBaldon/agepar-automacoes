@@ -14,39 +14,60 @@ import { pushRecent } from "../lib/recentJobs";
 
 type Op = "precos_auto" | "estrutura_auto";
 
+type LinkUtil = {
+  label: string;
+  url?: string;
+  hint?: string;
+  expectedPrecos?: string;
+  expectedEstrutura?: string;
+};
+
+const envStr = (v: string | undefined) => (v && v.trim() ? v.trim() : undefined);
+
 // Links úteis configuráveis via .env (Vite)
-const LINKS_UTEIS: Array<{ label: string; url?: string; hint?: string }> = [
+const LINKS_UTEIS: Array<LinkUtil> = [
   {
     label: "SINAPI – relatórios mensais",
     url: import.meta.env.VITE_LINK_SINAPI as string | undefined,
     hint: "Defina VITE_LINK_SINAPI no .env",
+    expectedPrecos: envStr(import.meta.env.VITE_EXPECTED_SINAPI_PRECOS as string | undefined),
+    expectedEstrutura: envStr(import.meta.env.VITE_EXPECTED_SINAPI_ESTRUTURA as string | undefined),
   },
   {
     label: "SUDECAP – tabelas de preços",
     url: import.meta.env.VITE_LINK_SUDECAP_PRECO as string | undefined,
     hint: "Defina VITE_LINK_SUDECAP_PRECO no .env",
+    expectedPrecos: envStr(import.meta.env.VITE_EXPECTED_SUDECAP_PRECOS as string | undefined),
   },
   {
     label: "SUDECAP – composições de serviços",
     url: import.meta.env.VITE_API_SUDECAP_COMPOSICAO as string | undefined,
     hint: "Defina VITE_API_SUDECAP_COMPOSICAO no .env",
+    expectedEstrutura: envStr(import.meta.env.VITE_EXPECTED_SUDECAP_ESTRUTURA as string | undefined),
   },
   {
     label: "SECID – custos de edificações",
     url: import.meta.env.VITE_LINK_SECID as string | undefined,
     hint: "Defina VITE_LINK_SECID no .env",
+    expectedPrecos: envStr(import.meta.env.VITE_EXPECTED_SECID_PRECOS as string | undefined),
+    expectedEstrutura: envStr(import.meta.env.VITE_EXPECTED_SECID_ESTRUTURA as string | undefined),
   },
   {
     label: "CPOS/CDHU – catálogo",
     url: import.meta.env.VITE_LINK_CPOS as string | undefined,
     hint: "Defina VITE_LINK_CPOS no .env",
+    expectedPrecos: envStr(import.meta.env.VITE_EXPECTED_CPOS_PRECOS as string | undefined),
+    expectedEstrutura: envStr(import.meta.env.VITE_EXPECTED_CPOS_ESTRUTURA as string | undefined),
   },
   {
     label: "SBC / TCPO",
     url: import.meta.env.VITE_LINK_SBC as string | undefined,
     hint: "Defina VITE_LINK_SBC no .env",
+    expectedPrecos: envStr(import.meta.env.VITE_EXPECTED_SBC_PRECOS as string | undefined),
+    expectedEstrutura: envStr(import.meta.env.VITE_EXPECTED_SBC_ESTRUTURA as string | undefined),
   },
 ];
+
 
 // --- Mini componente de upload (local ao arquivo) ---
 function UploadField(props: {
@@ -342,7 +363,7 @@ export default function ValidadorOrcamentoPage() {
       <section className="form-card">
         <h2 className="text-lg font-medium mb-2">Links úteis</h2>
         <ul className="list-disc ml-5 space-y-1 text-sm">
-          {LINKS_UTEIS.map(({ label, url, hint }) => (
+          {LINKS_UTEIS.map(({ label, url, hint, expectedPrecos, expectedEstrutura }) => (
             <li key={label}>
               {url ? (
                 <a href={url} target="_blank" rel="noreferrer" className="text-blue-600 underline">
@@ -351,15 +372,36 @@ export default function ValidadorOrcamentoPage() {
               ) : (
                 <span className="opacity-70">{label}</span>
               )}
+
+              {/* Dicas de nome esperado, se configuradas */}
+              {(expectedPrecos || expectedEstrutura) && (
+                <div className="mt-0.5 ml-1 text-xs opacity-70 space-y-0.5">
+                  {expectedPrecos && (
+                    <div>
+                      Para <strong>Preços</strong>: <code className="break-all">{expectedPrecos}</code>
+                    </div>
+                  )}
+                  {expectedEstrutura && (
+                    <div>
+                      Para <strong>Estrutura</strong>: <code className="break-all">{expectedEstrutura}</code>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Fallback do hint quando não há URL configurada */}
               {!url && hint && <span className="ml-2 text-xs opacity-60">({hint})</span>}
             </li>
           ))}
         </ul>
+
         <p className="text-xs text-[var(--muted)] mt-2">
-          Configure os endereços no arquivo <code>.env</code> do front-end (ex.:{" "}
-          <code>VITE_LINK_SINAPI</code>, <code>VITE_LINK_SUDECAP</code>, <code>VITE_LINK_SECID</code>…).
+          Configure os endereços e nomes esperados no <code>.env</code> do front-end
+          (ex.: <code>VITE_LINK_SINAPI</code>, <code>VITE_EXPECTED_SINAPI_PRECOS</code>,{" "}
+          <code>VITE_EXPECTED_SINAPI_ESTRUTURA</code>…).
         </p>
       </section>
+
     </main>
   );
 }
