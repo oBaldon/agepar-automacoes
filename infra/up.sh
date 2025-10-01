@@ -14,7 +14,7 @@ API="http://localhost:${API_PORT}"
 NETWORK="${NETWORK:-agepar-automacoes_default}"
 
 # (opcional) iniciar o portal no final: export START_PORTAL=true
-START_PORTAL="${START_PORTAL:-false}"
+START_PORTAL="${START_PORTAL:-true}"
 
 echo "ROOT=$ROOT"
 echo "SHARED_DATA=$SHARED_DATA"
