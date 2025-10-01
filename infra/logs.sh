@@ -4,18 +4,42 @@
 #   ./logs.sh                  # tenta validador-{api,worker} e redis
 #   ./logs.sh api              # casa por serviço/nome/substring
 #   ./logs.sh '*validador*'    # glob
-# Vars:
 #   TAIL=200 SINCE=10m ./logs.sh
+#   ./logs.sh -t 300 --since 1h api worker
 
 set -Eeuo pipefail
 
 DEFAULT=("validador-api" "validador-worker" "redis")
-TAIL="${TAIL:-100}"
-SINCE_OPT=()
-[[ -n "${SINCE:-}" ]] && SINCE_OPT=(--since "$SINCE")
 
-args=("$@")
-[[ ${#args[@]} -eq 0 ]] && args=("${DEFAULT[@]}")
+# --- flags curtinhas ---
+FOLLOW=1
+TAIL_DEFAULT="${TAIL:-100}"
+TAIL="$TAIL_DEFAULT"
+SINCE_ENV="${SINCE:-}"
+SINCE_OPT=()
+ARGS=()
+
+while (( "$#" )); do
+  case "$1" in
+    -f|--follow) FOLLOW=1; shift ;;
+    -t|--tail)   TAIL="$2"; shift 2 ;;
+    --since)     SINCE_ENV="$2"; shift 2 ;;
+    --no-follow) FOLLOW=0; shift ;;
+    --) shift; while (( "$#" )); do ARGS+=("$1"); shift; done ;;
+    -h|--help)
+      echo "Uso: $0 [opções] [filtros...]"
+      echo "  -f, --follow        seguir logs (default)"
+      echo "  --no-follow         apenas imprimir o tail e sair"
+      echo "  -t, --tail N        quantas linhas por container (default: $TAIL_DEFAULT)"
+      echo "  --since DURAÇÃO     ex.: 10m, 1h, 2025-10-01T08:00:00"
+      exit 0
+      ;;
+    *) ARGS+=("$1"); shift ;;
+  esac
+done
+
+[[ -n "$SINCE_ENV" ]] && SINCE_OPT=(--since "$SINCE_ENV")
+[[ ${#ARGS[@]} -eq 0 ]] && ARGS=("${DEFAULT[@]}")
 
 # --- coleta nomes conhecidos (docker global)
 mapfile -t ALL_NAMES < <(docker ps -a --format '{{.Names}}')
@@ -38,7 +62,7 @@ fi
 
 # --- resolve cada arg p/ um container
 resolved=()
-for a in "${args[@]}"; do
+for a in "${ARGS[@]}"; do
   # 1) exato
   for n in "${ALL_NAMES[@]}"; do
     [[ "$n" == "$a" ]] && resolved+=("$n") && continue 2
@@ -47,18 +71,15 @@ for a in "${args[@]}"; do
   if (( compose_ok )) && [[ -n "${SERV2NAME[$a]:-}" ]]; then
     resolved+=("${SERV2NAME[$a]}"); continue
   fi
-  # 3) glob
+  # 3) glob (shell-like)
   if [[ "$a" == *"*"* || "$a" == *"?"* ]]; then
-    while IFS= read -r n; do resolved+=("$n"); done < <(printf "%s\n" "${ALL_NAMES[@]}" | grep -F . | grep -i -E "$(printf '%s' "$a" | sed 's/\*/.*/g; s/?/./g')" || true)
+    pat="^$(printf '%s' "$a" | sed 's/[.[\^$()+{}|]/\\&/g; s/\*/.*/g; s/?/./g')$"
+    while IFS= read -r n; do resolved+=("$n"); done < <(printf "%s\n" "${ALL_NAMES[@]}" | grep -iE "$pat" || true)
     [[ ${#resolved[@]} -gt 0 ]] && continue
   fi
-  # 4) substring case-insensitive (pega o primeiro)
-  match="$(printf "%s\n" "${ALL_NAMES[@]}" | grep -iF "$a" | head -n1 || true)"
-  if [[ -n "$match" ]]; then
-    resolved+=("$match")
-  else
-    echo "[warn] não encontrei container para: $a" >&2
-  fi
+  # 4) substring case-insensitive (pega todos)
+  while IFS= read -r n; do resolved+=("$n"); done < <(printf "%s\n" "${ALL_NAMES[@]}" | grep -iF "$a" || true)
+  [[ ${#resolved[@]} -gt 0 ]] || echo "[warn] não encontrei container para: $a" >&2
 done
 
 # de-dup
@@ -72,7 +93,7 @@ if [[ ${#resolved[@]} -eq 0 ]]; then
   exit 0
 fi
 
-echo "[info] seguindo logs de: ${resolved[*]} (tail=$TAIL)"
+echo "[info] seguindo logs de: ${resolved[*]} (tail=$TAIL${SINCE_ENV:+ since=$SINCE_ENV})"
 is_tty=0; [[ -t 1 ]] && is_tty=1
 reset=$'\e[0m'
 color() {
@@ -87,16 +108,19 @@ color() {
 
 pids=()
 follow() {
-  local name="$1" c; c="$(color "$name")"
+  local name="$1" c ts; c="$(color "$name")"
   ( set +e
+    local first=1
     while docker ps -a --format '{{.Names}}' | grep -Fx -- "$name" >/dev/null; do
+      (( first==0 )) && echo "[$name] (re)conectando aos logs..." >&2
+      first=0
+      cmd=(docker logs ${FOLLOW:+-f} --tail="$TAIL" "${SINCE_OPT[@]}" --timestamps "$name")
       if command -v stdbuf >/dev/null 2>&1; then
-        stdbuf -oL -eL docker logs -f --tail="$TAIL" "${SINCE_OPT[@]}" "$name" 2>&1 \
-          | awk -v pre="[$name] " -v c="$c" -v r="$reset" '{print c pre $0 r}'
+        stdbuf -oL -eL "${cmd[@]}" 2>&1 | awk -v pre="[$name] " -v c="$c" -v r="$reset" '{print c pre $0 r}'
       else
-        docker logs -f --tail="$TAIL" "${SINCE_OPT[@]}" "$name" 2>&1 \
-          | awk -v pre="[$name] " -v c="$c" -v r="$reset" '{print c pre $0 r}'
+        "${cmd[@]}" 2>&1 | awk -v pre="[$name] " -v c="$c" -v r="$reset" '{print c pre $0 r}'
       fi
+      # se saiu (container reiniciou ou logs fecharam), tenta de novo
       sleep 0.3
     done
     echo "[$name] finalizado."
@@ -106,4 +130,3 @@ follow() {
 for n in "${resolved[@]}"; do follow "$n"; done
 trap 'for p in "${pids[@]:-}"; do kill $p 2>/dev/null || true; done' INT TERM EXIT
 wait || true
-
